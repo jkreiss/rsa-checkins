@@ -31,7 +31,7 @@ if not found:
     st.info("No players match that name.")
     st.stop()
 
-names = {r["id"]: f"{r['name']} ({'product line' if r['kind'] == 'product_line' else 'person'})" for r in found}
+names = {r["id"]: f"{r['name']} ({r['sport'] or 'sport unknown'})" for r in found}
 sid = st.selectbox("Player", list(names), format_func=names.get)
 s = conn.execute("SELECT * FROM subjects WHERE id = ?", (sid,)).fetchone()
 
