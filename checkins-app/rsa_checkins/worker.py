@@ -99,7 +99,8 @@ def process_one(conn: sqlite3.Connection, client, worker_id: str, now: datetime)
     model = db.get_setting(conn, "model")
     if _prepare_pending_runs(conn, client, model):
         return True
-    work = jobs.claim_next(conn, worker_id, int(db.get_setting(conn, "refresh_days")), now)
+    work = jobs.claim_next(conn, worker_id, int(db.get_setting(conn, "refresh_days")), now,
+                           int(db.get_setting(conn, "retired_refresh_days")))
     if work is None:
         return False
     if isinstance(work, jobs.ResearchWork):

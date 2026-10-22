@@ -130,9 +130,11 @@ def test_players_page_edits_facts(data_conn):
 def test_settings_saved(data_conn):
     at = _app("pages/settings.py")
     at.number_input(key="refresh_days").set_value(30).run()
+    at.number_input(key="retired_refresh_days").set_value(365).run()
     at.button(key="save-settings").click().run()
     assert not at.exception
     assert db.get_setting(data_conn, "refresh_days") == 30
+    assert db.get_setting(data_conn, "retired_refresh_days") == 365
     cols = db.get_setting(data_conn, "output_columns")
     assert cols[:2] == ["Handle", "Title"] and set(cols) == set(config.DEFAULT_OUTPUT_COLUMNS)
 

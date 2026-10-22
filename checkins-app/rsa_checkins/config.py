@@ -13,7 +13,8 @@ DEFAULT_OUTPUT_COLUMNS = ["Handle", "Title", "Body (HTML)", "SEO Title", *METAFI
 
 DEFAULT_SETTINGS = {
     "model": "claude-sonnet-5-5",
-    "refresh_days": 90,
+    "refresh_days": 30,            # active (and unknown) players: re-checked after about a month
+    "retired_refresh_days": 180,   # retired players: re-checked after about 6 months
     "concurrency": 2,
     "output_columns": DEFAULT_OUTPUT_COLUMNS,
     "include_drafts": True,

@@ -83,3 +83,14 @@ def test_previous_notes_returns_second_paragraphs(conn, fake_client_factory):
     complete_product(conn, pids[1], "<p>two</p><p>Note two</p>", "s")
     assert sorted(previous_notes(conn, [emmitt])) == ["Note & one", "Note two"]
     assert previous_notes(conn, [emmitt], limit=1) and len(previous_notes(conn, [emmitt], limit=1)) == 1
+
+
+def test_retired_players_are_rechecked_after_their_own_period(conn):
+    sid = get_or_create_subject(conn, "A", "person")
+    conn.execute("UPDATE subjects SET status='retired', researched_at=? WHERE id=?", ((NOW - timedelta(days=181)).isoformat(), sid))
+    assert not is_fresh(_row(conn, sid), 30, NOW, retired_days=180)
+    conn.execute("UPDATE subjects SET researched_at=? WHERE id=?", ((NOW - timedelta(days=179)).isoformat(), sid))
+    assert is_fresh(_row(conn, sid), 30, NOW, retired_days=180)
+    pl = get_or_create_subject(conn, "1981 Donruss", "product_line")      # card sets: never re-checked
+    conn.execute("UPDATE subjects SET researched_at=? WHERE id=?", ((NOW - timedelta(days=1000)).isoformat(), pl))
+    assert is_fresh(_row(conn, pl), 30, NOW, retired_days=180)

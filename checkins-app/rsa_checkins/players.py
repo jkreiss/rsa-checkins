@@ -16,12 +16,20 @@ def get_or_create_subject(conn: sqlite3.Connection, name: str, kind: str) -> int
     return conn.execute("SELECT id FROM subjects WHERE kind = ? AND norm_name = ?", (kind, norm)).fetchone()["id"]
 
 
-def is_fresh(row: sqlite3.Row, refresh_days: int, now: datetime) -> bool:
+def is_fresh(row: sqlite3.Row, refresh_days: int, now: datetime, retired_days: int | None = None) -> bool:
+    """Facts are fresh enough to write from. Card sets never expire; retired players expire after
+    retired_days (never, if None); everyone else after refresh_days."""
     if row["researched_at"] is None:
         return False
-    if row["kind"] == "product_line" or row["status"] == "retired":
+    if row["kind"] == "product_line":
         return True
-    return now - parse_iso(row["researched_at"]) < timedelta(days=refresh_days)
+    if row["status"] == "retired":
+        days = retired_days
+        if days is None:
+            return True
+    else:
+        days = refresh_days
+    return now - parse_iso(row["researched_at"]) < timedelta(days=days)
 
 
 def save_research(conn: sqlite3.Connection, subject_id: int, r: Research, worker_id: str | None = None) -> bool:

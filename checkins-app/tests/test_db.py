@@ -8,7 +8,8 @@ def test_init_db_is_idempotent(conn):
 
 
 def test_setting_defaults_and_roundtrip(conn):
-    assert db.get_setting(conn, "refresh_days") == 90
+    assert db.get_setting(conn, "refresh_days") == 30            # active players: about a month
+    assert db.get_setting(conn, "retired_refresh_days") == 180   # retired players: about 6 months
     assert db.get_setting(conn, "model") == "claude-sonnet-5-5"
     db.set_setting(conn, "output_columns", ["Handle", "Title", "Body (HTML)", "Tags"])
     assert db.get_setting(conn, "output_columns")[-1] == "Tags"

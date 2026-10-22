@@ -345,3 +345,14 @@ def test_reuse_recomputes_team_and_league_with_current_rules(conn, fake_client_f
     run2 = create_run(conn, FIX, "again.csv", include_drafts=True)
     row = conn.execute("SELECT reused, team, league FROM products WHERE run_id=? AND handle LIKE 'tee-higgins%'", (run2,)).fetchone()
     assert (row["reused"], row["team"], row["league"]) == (1, "Cincinnati Bengals", "NFL")
+
+
+def test_stale_retired_player_is_researched_again(conn, fake_client_factory):
+    run_id = prepared_run(conn, fake_client_factory)
+    set_run_status(conn, run_id, "running")
+    _research_all(conn)
+    sid = _sid(conn, "Jim Kelly")
+    conn.execute("UPDATE subjects SET status='retired', researched_at=? WHERE id=?", ((NOW - timedelta(days=200)).isoformat(), sid))
+    w = claim_next(conn, "w1", 30, NOW, retired_days=180)
+    assert isinstance(w, ResearchWork) and w.subject_id == sid
+    assert preview(conn, run_id, 30, NOW, retired_days=180).subjects_to_research == 1

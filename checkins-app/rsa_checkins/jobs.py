@@ -114,7 +114,8 @@ class Preview:
     subjects_to_research: int
 
 
-def preview(conn: sqlite3.Connection, run_id: int, refresh_days: int, now: datetime) -> Preview:
+def preview(conn: sqlite3.Connection, run_id: int, refresh_days: int, now: datetime,
+            retired_days: int | None = None) -> Preview:
     run = conn.execute("SELECT skipped_new_style FROM runs WHERE id = ?", (run_id,)).fetchone()
     counts = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(reused), 0) AS reused FROM products WHERE run_id = ?",
                           (run_id,)).fetchone()
@@ -123,7 +124,7 @@ def preview(conn: sqlite3.Connection, run_id: int, refresh_days: int, now: datet
         "JOIN products p ON p.id = ps.product_id WHERE p.run_id = ? AND p.state = 'pending'",
         (run_id,),
     ).fetchall()
-    fresh = sum(1 for s in subjects if players.is_fresh(s, refresh_days, now))
+    fresh = sum(1 for s in subjects if players.is_fresh(s, refresh_days, now, retired_days))
     return Preview(counts["n"], counts["reused"], run["skipped_new_style"], len(subjects), fresh, len(subjects) - fresh)
 
 
@@ -160,7 +161,7 @@ _OPEN_PRODUCTS = ("FROM products p JOIN runs r ON r.id = p.run_id "
 
 
 def claim_next(conn: sqlite3.Connection, worker_id: str, refresh_days: int,
-               now: datetime) -> ResearchWork | WriteWork | None:
+               now: datetime, retired_days: int | None = None) -> ResearchWork | WriteWork | None:
     cutoff = iso(now - timedelta(minutes=CLAIM_TIMEOUT_MIN))
     stamp = iso(now)
     with transaction(conn):
@@ -172,7 +173,7 @@ def claim_next(conn: sqlite3.Connection, worker_id: str, refresh_days: int,
             (cutoff,),
         ).fetchall()
         for s in subjects:
-            if players.is_fresh(s, refresh_days, now):
+            if players.is_fresh(s, refresh_days, now, retired_days):
                 continue
             conn.execute("UPDATE subjects SET claimed_by = ?, claimed_at = ? WHERE id = ?", (worker_id, stamp, s["id"]))
             titles = [r["title"] for r in conn.execute(
@@ -195,7 +196,7 @@ def claim_next(conn: sqlite3.Connection, worker_id: str, refresh_days: int,
                 f"WHERE ps.product_id IN ({marks})", list(links)):
             links[row["product_id"]].append(row["id"])
             if row["id"] not in fresh:
-                fresh[row["id"]] = players.is_fresh(row, refresh_days, now)
+                fresh[row["id"]] = players.is_fresh(row, refresh_days, now, retired_days)
         group_key = None
         group: list[int] = []
         for p in products:

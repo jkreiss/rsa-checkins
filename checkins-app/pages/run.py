@@ -59,8 +59,9 @@ def status_area(run_id: int) -> None:
             jobs.retry_prepare(conn, run_id)
             st.rerun(scope="fragment")
     elif status == "ready":
-        p = jobs.preview(conn, run_id, int(db.get_setting(conn, "refresh_days")), datetime.now(timezone.utc))
-        st.subheader("What this export will do")
+        p = jobs.preview(conn, run_id, int(db.get_setting(conn, "refresh_days")), datetime.now(timezone.utc),
+                         int(db.get_setting(conn, "retired_refresh_days")))
+        st.subheader("What this will do")
         c = st.columns(3)
         c[0].metric("Products to write", p.products - p.reused)
         c[1].metric("Players already known", p.subjects_fresh)
