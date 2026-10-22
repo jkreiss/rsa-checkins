@@ -9,13 +9,13 @@ from rsa_checkins.shopify_export import ExportFormatError
 from rsa_checkins.ui import STATUS_WORDS, get_conn
 
 conn = get_conn()
-st.title("Run")
+st.title("Large inventory export")
 
 # ---------- upload ----------
 with st.form("upload", clear_on_submit=True):
     uploaded = st.file_uploader("Shopify product export", type=["csv"])
     include_drafts = st.checkbox("Include drafts", value=bool(db.get_setting(conn, "include_drafts")))
-    submitted = st.form_submit_button("Create run", key="create-run")
+    submitted = st.form_submit_button("Update products", key="create-run")
 
 if submitted and uploaded is not None:
     name = os.path.basename(uploaded.name) or "export.csv"
@@ -38,10 +38,10 @@ if not runs:
     st.stop()
 
 ids = [r["id"] for r in runs]
-labels = {r["id"]: f"Run {r['id']} · {r['filename']} · {STATUS_WORDS[r['status']]} · {r['created_at'][:16].replace('T', ' ')}"
+labels = {r["id"]: f"Export {r['id']} · {r['filename']} · {STATUS_WORDS[r['status']]} · {r['created_at'][:16].replace('T', ' ')}"
           for r in runs}
 chosen = st.session_state.get("run_id")
-run_id = st.selectbox("Run", ids, index=ids.index(chosen) if chosen in ids else 0, format_func=labels.get)
+run_id = st.selectbox("Export", ids, index=ids.index(chosen) if chosen in ids else 0, format_func=labels.get)
 st.session_state["run_id"] = run_id
 
 
@@ -54,13 +54,13 @@ def status_area(run_id: int) -> None:
     if status == "parsing":
         st.info(STATUS_WORDS["parsing"])
     elif status == "error":
-        st.error(f"This run stopped: {run['error']}")
+        st.error(f"This export stopped: {run['error']}")
         if st.button("Try again", key=f"try-again-{run_id}"):
             jobs.retry_prepare(conn, run_id)
             st.rerun(scope="fragment")
     elif status == "ready":
         p = jobs.preview(conn, run_id, int(db.get_setting(conn, "refresh_days")), datetime.now(timezone.utc))
-        st.subheader("What this run will do")
+        st.subheader("What this export will do")
         c = st.columns(3)
         c[0].metric("Products to write", p.products - p.reused)
         c[1].metric("Players already known", p.subjects_fresh)
@@ -112,11 +112,13 @@ def status_area(run_id: int) -> None:
                    "2–3 products first and check price, stock, images and status are unchanged.")
         columns = db.get_setting(conn, "output_columns")
         c = st.columns(2)
-        c[0].download_button("Descriptions CSV", lambda: output.build_output_csv(conn, run_id, columns),
-                             file_name=f"descriptions-run{run_id}.csv", mime="text/csv", on_click="ignore",
+        c[0].download_button("Download import CSV", lambda: output.build_output_csv(conn, run_id, columns),
+                             file_name=f"shopify-import-{run_id}.csv", mime="text/csv", on_click="ignore",
+                             type="primary", width="stretch", icon=":material/download:",
                              key=f"dl-desc-{run_id}")
-        c[1].download_button("Facts log CSV", lambda: output.build_facts_csv(conn, run_id),
-                             file_name=f"facts-run{run_id}.csv", mime="text/csv", on_click="ignore",
+        c[1].download_button("Download facts log", lambda: output.build_facts_csv(conn, run_id),
+                             file_name=f"facts-log-{run_id}.csv", mime="text/csv", on_click="ignore",
+                             width="stretch", icon=":material/description:",
                              key=f"dl-facts-{run_id}")
 
 

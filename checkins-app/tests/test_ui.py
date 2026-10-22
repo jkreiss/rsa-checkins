@@ -70,7 +70,9 @@ def test_done_run_shows_two_downloads(data_conn):
     data_conn.execute("UPDATE runs SET status='done' WHERE id=?", (run_id,))
     at = _app("pages/run.py")
     assert not at.exception
-    assert len(at.get("download_button")) == 2
+    buttons = at.get("download_button")
+    assert [b.proto.label for b in buttons] == ["Download import CSV", "Download facts log"]
+    assert buttons[0].proto.type == "primary"
 
 
 def test_upload_creates_one_run(data_conn):
@@ -187,3 +189,11 @@ def test_delete_from_edit_mode(data_conn):
     assert not at.exception
     assert [r[0] for r in data_conn.execute("SELECT fact FROM facts WHERE deleted=0")] == ["Right fact"]
     assert not any("Wrong fact" in m.value for m in at.markdown)
+
+
+def test_page_is_named_large_inventory_export(data_conn):
+    at = _app("pages/run.py")
+    assert at.title[0].value == "Large inventory export"
+    assert at.button(key="create-run").label == "Update products"
+    nav = (APP_DIR / "app.py").read_text()
+    assert 'title="Large inventory export"' in nav
