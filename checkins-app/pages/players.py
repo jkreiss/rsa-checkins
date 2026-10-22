@@ -1,10 +1,22 @@
 """Players page: look up a player, fix or delete facts, force a re-check."""
 import json
+import re
+from urllib.parse import urlsplit
 
 import streamlit as st
 
 from rsa_checkins import players
 from rsa_checkins.ui import get_conn
+
+
+def _md(text: str) -> str:
+    """Show text as written: escape characters Streamlit would read as formatting ($ * _ [ ] ...)."""
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!$~|<>])", r"\\\1", text or "")
+
+
+def _safe_url(url: str) -> str:
+    url = (url or "").strip()
+    return url if url.lower().startswith(("http://", "https://")) else ""
 
 conn = get_conn()
 st.title("Players")
@@ -43,18 +55,43 @@ st.subheader("Facts")
 facts = players.list_facts(conn, sid)
 if not facts:
     st.caption("No facts saved.")
+# One fact at a time can be open for editing. The buttons act in callbacks, before the page redraws.
+def _open(fid: int) -> None:
+    st.session_state["editing_fact"] = fid
+
+
+def _close() -> None:
+    st.session_state["editing_fact"] = None
+
+
+def _save(fid: int) -> None:
+    players.update_fact(conn, fid, st.session_state[f"fact-{fid}"], st.session_state[f"url-{fid}"])
+    _close()
+
+
+def _delete(fid: int) -> None:
+    players.delete_fact(conn, fid)
+    _close()
+
+
+editing = st.session_state.get("editing_fact")
 for f in facts:
+    fid = f["id"]
+    details = ("Edited by hand · " if f["edited"] else "") + f"checked {f['checked_at'][:10]}"
     with st.container(border=True):
-        text = st.text_input("Fact", value=f["fact"], key=f"fact-{f['id']}")
-        url = st.text_input("Source URL", value=f["source_url"], key=f"url-{f['id']}")
-        c = st.columns([1, 1, 4])
-        if c[0].button("Save", key=f"save-{f['id']}"):
-            players.update_fact(conn, f["id"], text, url)
-            st.rerun()
-        if c[1].button("Delete", key=f"delete-{f['id']}"):
-            players.delete_fact(conn, f["id"])
-            st.rerun()
-        c[2].caption(("Edited by hand · " if f["edited"] else "") + f"checked {f['checked_at'][:10]}")
+        if editing == fid:
+            st.text_input("Fact", value=f["fact"], key=f"fact-{fid}")
+            st.text_input("Source URL", value=f["source_url"], key=f"url-{fid}")
+            c = st.columns([1, 1, 1, 3])
+            c[0].button("Save", key=f"save-{fid}", type="primary", on_click=_save, args=(fid,))
+            c[1].button("Cancel", key=f"cancel-{fid}", on_click=_close)
+            c[2].button("Delete", key=f"delete-{fid}", on_click=_delete, args=(fid,))
+        else:
+            c = st.columns([8, 1])
+            c[0].markdown(_md(f["fact"]))
+            link = _safe_url(f["source_url"])
+            c[0].caption((f"[{_md(urlsplit(link).netloc or link)}]({link}) · " if link else "No source · ") + details)
+            c[1].button("Edit", key=f"edit-{fid}", on_click=_open, args=(fid,))
 
 with st.form("add-fact", clear_on_submit=True):
     st.write("**Add fact**")

@@ -112,10 +112,15 @@ def test_players_page_edits_facts(data_conn):
     at.text_input(key="player-search").input("higgins").run()
     assert not at.exception
     fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
+    # facts are read-only until Edit is pressed
+    assert not [t for t in at.text_input if t.key == f"fact-{fid}"]
+    assert any("Drafted 2020" in m.value for m in at.markdown)
+    at.button(key=f"edit-{fid}").click().run()
     at.text_input(key=f"fact-{fid}").input("Drafted in 2020 by Cincinnati").run()
     at.button(key=f"save-{fid}").click().run()
     row = data_conn.execute("SELECT fact, edited FROM facts WHERE id=?", (fid,)).fetchone()
     assert (row["fact"], row["edited"]) == ("Drafted in 2020 by Cincinnati", 1)
+    assert not [t for t in at.text_input if t.key == f"fact-{fid}"]          # back to read-only after Save
     at.button(key=f"refresh-{sid}").click().run()
     assert data_conn.execute("SELECT researched_at FROM subjects WHERE id=?", (sid,)).fetchone()[0] is None
 
@@ -155,3 +160,30 @@ def test_download_warns_about_missing_handles(data_conn):
     complete_product(data_conn, pid, "<p>a</p><p>b</p>", "seo")
     at = _app("pages/run.py")
     assert any("new product" in c.value and "test import" in c.value for c in at.caption)
+
+
+def test_cancel_edit_keeps_the_fact(data_conn):
+    sid = get_or_create_subject(data_conn, "Tee Higgins", "person")
+    save_research(data_conn, sid, Research("Tee Higgins", "active", "Football", [], None, [Fact("Drafted 2020", "https://a")]))
+    at = _app("pages/players.py")
+    at.text_input(key="player-search").input("higgins").run()
+    fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
+    at.button(key=f"edit-{fid}").click().run()
+    at.text_input(key=f"fact-{fid}").input("Something else").run()
+    at.button(key=f"cancel-{fid}").click().run()
+    assert data_conn.execute("SELECT fact FROM facts WHERE id=?", (fid,)).fetchone()[0] == "Drafted 2020"
+    assert not [t for t in at.text_input if t.key == f"fact-{fid}"]
+
+
+def test_delete_from_edit_mode(data_conn):
+    sid = get_or_create_subject(data_conn, "Tee Higgins", "person")
+    save_research(data_conn, sid, Research("Tee Higgins", "active", "Football", [], None,
+                                           [Fact("Wrong fact", "https://a"), Fact("Right fact", "https://b")]))
+    at = _app("pages/players.py")
+    at.text_input(key="player-search").input("higgins").run()
+    wrong = data_conn.execute("SELECT id FROM facts WHERE fact='Wrong fact'").fetchone()["id"]
+    at.button(key=f"edit-{wrong}").click().run()
+    at.button(key=f"delete-{wrong}").click().run()
+    assert not at.exception
+    assert [r[0] for r in data_conn.execute("SELECT fact FROM facts WHERE deleted=0")] == ["Right fact"]
+    assert not any("Wrong fact" in m.value for m in at.markdown)
