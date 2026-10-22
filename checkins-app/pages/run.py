@@ -108,8 +108,7 @@ def status_area(run_id: int) -> None:
     if pr.done > 0:
         st.subheader("Downloads")
         st.caption("Import with \"Overwrite products with matching handles\" ticked. A product deleted or renamed in "
-                   "Shopify since this export was taken would come back as a new product, so do a test import of "
-                   "2–3 products first and check price, stock, images and status are unchanged.")
+                   "Shopify since this export was taken would come back as a new product.")
         columns = db.get_setting(conn, "output_columns")
         c = st.columns(2)
         c[0].download_button("Download import CSV", lambda: output.build_output_csv(conn, run_id, columns),

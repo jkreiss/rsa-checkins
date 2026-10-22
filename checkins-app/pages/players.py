@@ -19,7 +19,7 @@ def _safe_url(url: str) -> str:
     return url if url.lower().startswith(("http://", "https://")) else ""
 
 conn = get_conn()
-st.title("Players")
+st.title("Player Information")
 
 query = st.text_input("Search by name", key="player-search")
 if not query.strip():
