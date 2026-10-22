@@ -13,7 +13,7 @@ with st.sidebar:
         st.warning("Worker not running. Runs won't make progress until it starts.", icon="🔴")
 
 st.navigation([
-    st.Page("pages/run.py", title="Large inventory export"),
-    st.Page("pages/players.py", title="Players"),
+    st.Page("pages/run.py", title="Shopify Product Export"),
+    st.Page("pages/players.py", title="Player Information"),
     st.Page("pages/settings.py", title="Settings"),
 ]).run()

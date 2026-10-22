@@ -9,7 +9,7 @@ from rsa_checkins.shopify_export import ExportFormatError
 from rsa_checkins.ui import STATUS_WORDS, get_conn
 
 conn = get_conn()
-st.title("Large inventory export")
+st.title("Shopify Product Export")
 
 # ---------- upload ----------
 with st.form("upload", clear_on_submit=True):
