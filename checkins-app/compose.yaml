@@ -1,0 +1,36 @@
+# The check-ins app on its own: the page (checkins) and the background worker.
+# Run from this folder:  sudo docker compose up -d --build
+# Before the first run:  cp .env.example .env  (add ANTHROPIC_API_KEY), and create ./data owned by uid 1000:
+#   mkdir -p data && sudo chown 1000:1000 data
+# The database lives in ./data (git ignores it, so pulls never touch it). Don't delete this folder.
+name: rsa-checkins
+
+services:
+  checkins:
+    image: rsa-checkins:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8502:8501"   # only reachable on the server itself (SSH tunnel or Tailscale serve)
+    env_file: .env
+    environment:
+      TZ: Australia/Sydney
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: local
+
+  checkins-worker:
+    image: rsa-checkins:latest
+    restart: unless-stopped
+    command: ["python", "-m", "rsa_checkins.worker"]
+    env_file: .env
+    environment:
+      TZ: Australia/Sydney
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - checkins
+    stop_grace_period: 2m       # let the worker finish its current request before stopping
+    logging:
+      driver: local
