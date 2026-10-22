@@ -115,14 +115,14 @@ def test_players_page_edits_facts(data_conn):
     assert not at.exception
     fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
     # facts are read-only until Edit is pressed
-    assert not [t for t in at.text_input if t.key == f"fact-{fid}"]
+    assert not [t for t in at.text_area if t.key == f"fact-{fid}"]
     assert any("Drafted 2020" in m.value for m in at.markdown)
     at.button(key=f"edit-{fid}").click().run()
-    at.text_input(key=f"fact-{fid}").input("Drafted in 2020 by Cincinnati").run()
+    at.text_area(key=f"fact-{fid}").input("Drafted in 2020 by Cincinnati").run()
     at.button(key=f"save-{fid}").click().run()
     row = data_conn.execute("SELECT fact, edited FROM facts WHERE id=?", (fid,)).fetchone()
     assert (row["fact"], row["edited"]) == ("Drafted in 2020 by Cincinnati", 1)
-    assert not [t for t in at.text_input if t.key == f"fact-{fid}"]          # back to read-only after Save
+    assert not [t for t in at.text_area if t.key == f"fact-{fid}"]          # back to read-only after Save
     at.button(key=f"refresh-{sid}").click().run()
     assert data_conn.execute("SELECT researched_at FROM subjects WHERE id=?", (sid,)).fetchone()[0] is None
 
@@ -171,10 +171,10 @@ def test_cancel_edit_keeps_the_fact(data_conn):
     at.text_input(key="player-search").input("higgins").run()
     fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
     at.button(key=f"edit-{fid}").click().run()
-    at.text_input(key=f"fact-{fid}").input("Something else").run()
+    at.text_area(key=f"fact-{fid}").input("Something else").run()
     at.button(key=f"cancel-{fid}").click().run()
     assert data_conn.execute("SELECT fact FROM facts WHERE id=?", (fid,)).fetchone()[0] == "Drafted 2020"
-    assert not [t for t in at.text_input if t.key == f"fact-{fid}"]
+    assert not [t for t in at.text_area if t.key == f"fact-{fid}"]
 
 
 def test_delete_from_edit_mode(data_conn):

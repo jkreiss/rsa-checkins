@@ -80,7 +80,8 @@ for f in facts:
     details = ("Edited by hand · " if f["edited"] else "") + f"checked {f['checked_at'][:10]}"
     with st.container(border=True):
         if editing == fid:
-            st.text_input("Fact", value=f["fact"], key=f"fact-{fid}")
+            # multi-line so long facts wrap; longer than the box, it scrolls
+            st.text_area("Fact", value=f["fact"], key=f"fact-{fid}", height=110)
             st.text_input("Source URL", value=f["source_url"], key=f"url-{fid}")
             c = st.columns([1, 1, 1, 3])
             c[0].button("Save", key=f"save-{fid}", type="primary", on_click=_save, args=(fid,))
