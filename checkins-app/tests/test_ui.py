@@ -1,0 +1,157 @@
+from pathlib import Path
+
+import pytest
+from fakes import FIX
+from streamlit.testing.v1 import AppTest
+
+from rsa_checkins import config, db
+from rsa_checkins.claude_api import Fact, Research
+from rsa_checkins.jobs import complete_product, create_run, set_run_status
+from rsa_checkins.players import get_or_create_subject, save_research
+
+APP_DIR = Path(__file__).resolve().parent.parent
+PAGES = ["pages/run.py", "pages/players.py", "pages/settings.py"]
+
+
+@pytest.fixture
+def data_conn(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHECKINS_DATA_DIR", str(tmp_path))
+    c = db.connect(config.db_path())
+    db.init_db(c)
+    yield c
+    c.close()
+
+
+def _app(path: str) -> AppTest:
+    return AppTest.from_file(str(APP_DIR / path), default_timeout=30).run()
+
+
+def _labels(at, kind):
+    return [e.label for e in at.get(kind)]
+
+
+def test_app_renders(data_conn):
+    at = _app("app.py")
+    assert not at.exception
+    assert any("Worker not running" in w.value for w in at.sidebar.warning)
+
+
+def test_app_shows_worker_running_with_fresh_heartbeat(data_conn):
+    db.set_setting(data_conn, "worker_heartbeat", db.now_iso())
+    at = _app("app.py")
+    assert any("Worker running" in s.value for s in at.sidebar.success)
+
+
+@pytest.mark.parametrize("page", PAGES)
+def test_pages_render_on_empty_db(data_conn, page):
+    assert not _app(page).exception
+
+
+def test_ready_run_shows_start(data_conn):
+    run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    data_conn.execute("UPDATE runs SET status='ready' WHERE id=?", (run_id,))
+    at = _app("pages/run.py")
+    assert not at.exception
+    assert "Start" in _labels(at, "button")
+    at.button(key=f"start-{run_id}").click().run()
+    assert data_conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()["status"] == "running"
+
+
+def test_parsing_run_says_reading_titles(data_conn):
+    create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    at = _app("pages/run.py")
+    assert any("Reading product titles" in i.value for i in at.info)
+
+
+def test_done_run_shows_two_downloads(data_conn):
+    run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    pid = data_conn.execute("SELECT id FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()["id"]
+    complete_product(data_conn, pid, "<p>a</p><p>b</p>", "seo")
+    data_conn.execute("UPDATE runs SET status='done' WHERE id=?", (run_id,))
+    at = _app("pages/run.py")
+    assert not at.exception
+    assert len(at.get("download_button")) == 2
+
+
+def test_upload_creates_one_run(data_conn):
+    at = _app("pages/run.py")
+    at.file_uploader[0].set_value(("export.csv", FIX.read_bytes(), "text/csv"))
+    at.button(key="create-run").click().run()
+    assert not at.exception
+    at.run()
+    runs = data_conn.execute("SELECT * FROM runs").fetchall()
+    assert len(runs) == 1 and runs[0]["filename"] == "export.csv" and runs[0]["status"] == "parsing"
+    saved = Path(runs[0]["upload_path"])
+    assert saved.parent == config.upload_dir() and saved.name.endswith("-export.csv") and saved.exists()
+
+
+def test_upload_wrong_file_shows_error(data_conn):
+    at = _app("pages/run.py")
+    at.file_uploader[0].set_value(("../../evil.csv", b"a,b\n1,2\n", "text/csv"))
+    at.button(key="create-run").click().run()
+    assert any("Missing columns" in e.value for e in at.error)
+    assert data_conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+    assert all(p.parent == config.upload_dir() for p in config.upload_dir().iterdir())
+
+
+def test_failed_products_listed_with_retry(data_conn):
+    run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    data_conn.execute("UPDATE products SET state='failed', error='Research failed for X: boom' WHERE run_id=?", (run_id,))
+    data_conn.execute("UPDATE runs SET status='done' WHERE id=?", (run_id,))
+    at = _app("pages/run.py")
+    assert "Retry failed" in _labels(at, "button")
+    at.button(key=f"retry-{run_id}").click().run()
+    assert data_conn.execute("SELECT COUNT(*) FROM products WHERE state='pending'").fetchone()[0] == 10
+
+
+def test_players_page_edits_facts(data_conn):
+    sid = get_or_create_subject(data_conn, "Tee Higgins", "person")
+    save_research(data_conn, sid, Research("Tee Higgins", "active", "Football", ["Bengals"], "Bengals",
+                                           [Fact("Drafted 2020", "https://a")]))
+    at = _app("pages/players.py")
+    at.text_input(key="player-search").input("higgins").run()
+    assert not at.exception
+    fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
+    at.text_input(key=f"fact-{fid}").input("Drafted in 2020 by Cincinnati").run()
+    at.button(key=f"save-{fid}").click().run()
+    row = data_conn.execute("SELECT fact, edited FROM facts WHERE id=?", (fid,)).fetchone()
+    assert (row["fact"], row["edited"]) == ("Drafted in 2020 by Cincinnati", 1)
+    at.button(key=f"refresh-{sid}").click().run()
+    assert data_conn.execute("SELECT researched_at FROM subjects WHERE id=?", (sid,)).fetchone()[0] is None
+
+
+def test_settings_saved(data_conn):
+    at = _app("pages/settings.py")
+    at.number_input(key="refresh_days").set_value(30).run()
+    at.button(key="save-settings").click().run()
+    assert not at.exception
+    assert db.get_setting(data_conn, "refresh_days") == 30
+    cols = db.get_setting(data_conn, "output_columns")
+    assert cols[:2] == ["Handle", "Title"] and set(cols) == set(config.DEFAULT_OUTPUT_COLUMNS)
+
+
+def test_error_run_offers_try_again(data_conn):
+    run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    data_conn.execute("UPDATE runs SET status='error', error='bad key' WHERE id=?", (run_id,))
+    at = _app("pages/run.py")
+    assert any("bad key" in e.value for e in at.error)
+    at.button(key=f"try-again-{run_id}").click().run()
+    assert data_conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()["status"] == "parsing"
+
+
+def test_running_run_shows_activity(data_conn):
+    from rsa_checkins.jobs import log_event
+    run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    data_conn.execute("UPDATE runs SET status='running' WHERE id=?", (run_id,))
+    log_event(data_conn, "Looked up Tee Higgins (3 facts)")
+    at = _app("pages/run.py")
+    assert not at.exception
+    assert any("Looked up Tee Higgins (3 facts)" in t.value for t in at.text)
+
+
+def test_download_warns_about_missing_handles(data_conn):
+    run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    pid = data_conn.execute("SELECT id FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()["id"]
+    complete_product(data_conn, pid, "<p>a</p><p>b</p>", "seo")
+    at = _app("pages/run.py")
+    assert any("new product" in c.value and "test import" in c.value for c in at.caption)

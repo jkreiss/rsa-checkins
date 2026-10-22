@@ -1,0 +1,13 @@
+*.csv
+!checkins-app/tests/fixtures/*.csv
+__pycache__/
+.venv/
+checkins-app/data/
+.env
+.DS_Store
+.idea/
+.superpowers/
+/data/
+/docs/
+/Shopify Descriptions/
+*.md
