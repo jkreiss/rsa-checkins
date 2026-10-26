@@ -9,7 +9,11 @@ METAFIELD_SPORT = "Sport (product.metafields.custom.sport)"
 METAFIELD_TEAM = "Team (product.metafields.custom.team)"
 METAFIELD_COLUMNS = (METAFIELD_AUTHENTICITY, METAFIELD_LEAGUE, METAFIELD_PLAYER, METAFIELD_SPORT, METAFIELD_TEAM)
 
-DEFAULT_OUTPUT_COLUMNS = ["Handle", "Title", "Body (HTML)", "SEO Title", *METAFIELD_COLUMNS]
+# Shopify rejects an import without these ("Product options input is required"). One-variant products use
+# Option1 Name "Title" and Option1 Value "Default Title".
+OPTION_COLUMNS = {"Option1 Name": "Title", "Option1 Value": "Default Title"}
+
+DEFAULT_OUTPUT_COLUMNS = ["Handle", "Title", *OPTION_COLUMNS, "Body (HTML)", "SEO Title", *METAFIELD_COLUMNS]
 
 DEFAULT_SETTINGS = {
     "model": "claude-sonnet-5-5",

@@ -5,10 +5,10 @@ import json
 import sqlite3
 
 from .config import (METAFIELD_AUTHENTICITY, METAFIELD_COLUMNS, METAFIELD_LEAGUE, METAFIELD_PLAYER,  # noqa: F401
-                     METAFIELD_SPORT, METAFIELD_TEAM)
+                     METAFIELD_SPORT, METAFIELD_TEAM, OPTION_COLUMNS)
 from .descriptions import authenticity_value, sport_from_tags, sport_value
 
-REQUIRED = ("Handle", "Title")
+REQUIRED = ("Handle", "Title", *OPTION_COLUMNS)   # always in the output, whatever the saved setting
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
 
@@ -60,11 +60,14 @@ def build_output_csv(conn: sqlite3.Connection, run_id: int, columns: list[str]) 
     for p in conn.execute("SELECT * FROM products WHERE run_id = ? AND state = 'done' ORDER BY id", (run_id,)):
         first_row = json.loads(p["first_row"])
         derived = derived_values(p, _subject_names(conn, p["id"]))
+        no_options = not any(first_row.get(c, "").strip() for c in OPTION_COLUMNS)
         row = []
         for c in cols:
             existing = first_row.get(c, "")
             if c == "Body (HTML)":
                 row.append(derived[c])
+            elif c in OPTION_COLUMNS:   # copy the product's options; blank means the one-variant default
+                row.append(OPTION_COLUMNS[c] if no_options else existing)
             elif c == "SEO Title":
                 row.append(derived[c] or existing)
             elif c == METAFIELD_SPORT:   # always the code: existing words are converted, blanks filled

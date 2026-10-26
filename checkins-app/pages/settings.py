@@ -29,7 +29,7 @@ retired_refresh_days = st.number_input("Re-check retired players after (days)", 
 #                               help="Takes effect when the worker restarts.")
 # st.caption("Players at a time takes effect when the worker restarts.")
 # st.write("**Output columns**")
-# st.caption("Handle and Title are always included.")
+# st.caption("Handle, Title, Option1 Name and Option1 Value are always included.")
 # columns = st.multiselect("Other columns", options, default=current, key="output_columns")
 # include_drafts = st.checkbox("Include drafts by default", value=bool(db.get_setting(conn, "include_drafts")),
 #                              key="include_drafts")

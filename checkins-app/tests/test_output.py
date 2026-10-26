@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 
 from fakes import prepared_run
 
@@ -84,14 +85,35 @@ def test_extra_column_in_header_order_and_missing_dropped(conn, fake_client_fact
     run_id = _done_run(conn, fake_client_factory)
     data = build_output_csv(conn, run_id, DEFAULT_OUTPUT_COLUMNS + ["Tags", "Not A Column"])
     header = next(csv.reader(io.StringIO(data.decode("utf-8"))))
-    assert header == ["Handle", "Title", "Body (HTML)", "Tags", *DEFAULT_OUTPUT_COLUMNS[3:]]
+    assert header == [*DEFAULT_OUTPUT_COLUMNS[:5], "Tags", *DEFAULT_OUTPUT_COLUMNS[5:]]
     assert _by_handle(_rows(data), "jim-kelly")["Tags"].startswith("Bills, jersey")
 
 
-def test_output_columns_always_has_handle_and_title_first():
-    header = ["Handle", "Title", "Body (HTML)", "Tags", "SEO Title"]
-    assert output_columns(["SEO Title", "Tags"], header) == ["Handle", "Title", "Tags", "SEO Title"]
-    assert output_columns([], header) == ["Handle", "Title"]
+def test_output_columns_always_has_handle_title_and_options_first():
+    header = ["Handle", "Title", "Body (HTML)", "Option1 Name", "Option1 Value", "Tags", "SEO Title"]
+    always = ["Handle", "Title", "Option1 Name", "Option1 Value"]
+    assert output_columns(["SEO Title", "Tags"], header) == [*always, "Tags", "SEO Title"]
+    assert output_columns([], header) == always
+
+
+def test_option_columns_copied_from_export(conn, fake_client_factory):
+    run_id = _done_run(conn, fake_client_factory)
+    rows = _rows(build_output_csv(conn, run_id, ["Handle", "Title"]))   # e.g. an older saved setting
+    assert all((r["Option1 Name"], r["Option1 Value"]) == ("Title", "Default Title") for r in rows)
+
+
+def test_option_columns_keep_real_options_and_fill_blanks(conn, fake_client_factory):
+    run_id = _done_run(conn, fake_client_factory)
+    for handle, name, value in (("odell", "Size", "Large"), ("jim-kelly", "", "")):
+        p = conn.execute("SELECT id, first_row FROM products WHERE run_id=? AND handle LIKE ?",
+                         (run_id, handle + "%")).fetchone()
+        row = json.loads(p["first_row"])
+        row["Option1 Name"], row["Option1 Value"] = name, value
+        conn.execute("UPDATE products SET first_row=? WHERE id=?", (json.dumps(row), p["id"]))
+    rows = _rows(build_output_csv(conn, run_id, DEFAULT_OUTPUT_COLUMNS))
+    assert (_by_handle(rows, "odell")["Option1 Name"], _by_handle(rows, "odell")["Option1 Value"]) == ("Size", "Large")
+    assert (_by_handle(rows, "jim-kelly")["Option1 Name"], _by_handle(rows, "jim-kelly")["Option1 Value"]) == \
+        ("Title", "Default Title")
 
 
 def test_output_round_trips_html_with_commas_and_quotes(conn, fake_client_factory):
