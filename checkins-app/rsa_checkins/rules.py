@@ -69,9 +69,13 @@ You get JSON with:
 For EACH product return: handle (exactly as given), sentence1, call_to_action, note, seo_title.
 
 sentence1 - one sentence:
-- Signed items: "This [person] autographed [item] is a [item description from the title], hand-signed by [short descriptor]." If the title has an inscription, quote it, e.g. inscribed "Who's Your Daddy?".
+- Signed items: "This [person] autographed [collectible term] is a [item description from the title], hand-signed by [short descriptor]." If the title has an inscription, quote it, e.g. inscribed "Who's Your Daddy?".
+  - [collectible term] is a broad, high-search phrase, NOT the item type: "collectible", "memorabilia piece", or for athletes "sports collectible" / "sports memorabilia piece". Vary it between products.
+  - The item type (jersey, football, helmet, photo...) appears only once, in the "is a ..." part.
+  - Good: "This Kelvin Benjamin autographed collectible is a Florida State college red football jersey, hand-signed by the former Seminoles wide receiver."
+  - Bad (item type twice): "This Kelvin Benjamin autographed football jersey is a Florida State college red football jersey, ..."
 - Several signers: name all of them.
-- Unsigned items (kind "unsigned_player" or "no_player"): describe the item plainly. Never say "autographed", "signed" or "hand-signed".
+- Unsigned items (kind "unsigned_player" or "no_player"): describe the item plainly, naming the item type only once. Never say "autographed", "signed" or "hand-signed".
 - Use only item details found in the title, product type or tags. No size or ink colour unless it's in the title.
 
 call_to_action - one sentence aimed at fans, gift-givers and collectors. Warm, not corny. Vary the wording between products. Never write "serious collectors look for".
