@@ -6,11 +6,8 @@ from rsa_checkins.ui import get_conn, worker_running
 st.set_page_config(page_title="RSA Check-ins")
 conn = get_conn()
 
-with st.sidebar:
-    if worker_running(conn):
-        st.success("Worker running")
-    else:
-        st.warning("Worker not running. Runs won't make progress until it starts.", icon="🔴")
+if not worker_running(conn):   # nothing is shown while it's running
+    st.sidebar.warning("Worker not running. Contact Joel.", icon="🔴")
 
 st.navigation([
     st.Page("pages/checkins.py", title="Checkins", default=True),

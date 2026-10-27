@@ -33,13 +33,13 @@ def _labels(at, kind):
 def test_app_renders(data_conn):
     at = _app("app.py")
     assert not at.exception
-    assert any("Worker not running" in w.value for w in at.sidebar.warning)
+    assert [w.value for w in at.sidebar.warning] == ["Worker not running. Contact Joel."]
 
 
 def test_app_shows_worker_running_with_fresh_heartbeat(data_conn):
     db.set_setting(data_conn, "worker_heartbeat", db.now_iso())
     at = _app("app.py")
-    assert any("Worker running" in s.value for s in at.sidebar.success)
+    assert not at.sidebar.success and not at.sidebar.warning
 
 
 @pytest.mark.parametrize("page", PAGES)
