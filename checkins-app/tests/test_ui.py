@@ -227,11 +227,11 @@ def test_checkins_ready_run_shows_preview_and_start(data_conn, tmp_path):
     run_id = _checkin_run(data_conn, tmp_path, {"jerseys": [NO_CERT]})
     at = _app("pages/checkins.py")
     assert not at.exception
+    assert any("jerseys 5" in c.value for c in at.caption)
     tables = [df.value.to_string() for df in at.dataframe]
-    assert any("jerseys" in t for t in tables)
     assert any("Joe Namath" in t and "cert" in t for t in tables)
     assert "Start" in _labels(at, "button")
-    at.button(key=f"start-checkin-{run_id}").click().run()
+    at.button(key=f"start-{run_id}").click().run()
     assert data_conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()["status"] == "running"
 
 
@@ -248,7 +248,7 @@ def test_checkins_download_caption(data_conn, tmp_path):
 
 def test_checkins_has_upload_form(data_conn):
     at = _app("pages/checkins.py")
-    assert at.button(key="create-checkin-run").label == "Read check-in sheet"
+    assert at.button(key="create-checkin-run").label == "Create products"
 
 
 def test_export_page_hides_checkin_runs(data_conn, tmp_path):
@@ -262,3 +262,16 @@ def test_checkins_page_hides_export_runs(data_conn):
     create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
     at = _app("pages/checkins.py")
     assert any("Upload a check-in sheet" in i.value for i in at.info)
+
+
+def test_both_run_pages_preview_the_same_way(data_conn, tmp_path):
+    export = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    data_conn.execute("UPDATE runs SET status='ready' WHERE id=?", (export,))
+    _checkin_run(data_conn, tmp_path)
+    shown = []
+    for page in ("pages/run.py", "pages/checkins.py"):
+        at = _app(page)
+        assert not at.exception
+        shown.append(([m.label for m in at.metric], [s.value for s in at.subheader][:1], "Start" in _labels(at, "button")))
+    assert shown[0] == shown[1]
+    assert shown[0][0] == ["Products to write", "Players already known", "Players to look up"]

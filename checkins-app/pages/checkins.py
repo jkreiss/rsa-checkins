@@ -1,47 +1,12 @@
 """Checkins page: upload a check-in workbook, see what it will make, start it, download new draft products."""
-import os
-from datetime import datetime, timezone
-
 import streamlit as st
 
-from rsa_checkins import config, db, jobs, output
+from rsa_checkins import jobs, output
 from rsa_checkins.checkin_sheet import CheckinFormatError
-from rsa_checkins.ui import STATUS_WORDS, activity_section, get_conn, progress_section
+from rsa_checkins.ui import RunPage, get_conn, run_picker, run_status, save_upload
 
 conn = get_conn()
 st.title("Checkins")
-
-# ---------- upload ----------
-with st.form("upload-checkin", clear_on_submit=True):
-    uploaded = st.file_uploader("Check-in sheet", type=["xlsx"])
-    submitted = st.form_submit_button("Read check-in sheet", key="create-checkin-run")
-
-if submitted and uploaded is not None:
-    name = os.path.basename(uploaded.name) or "checkin.xlsx"
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    config.upload_dir().mkdir(parents=True, exist_ok=True)
-    path = config.upload_dir() / f"{stamp}-{name}"
-    path.write_bytes(uploaded.getvalue())
-    try:
-        st.session_state["checkin_run_id"] = jobs.create_checkin_run(conn, path, name)
-    except CheckinFormatError as e:
-        path.unlink(missing_ok=True)
-        st.error(str(e))
-elif submitted:
-    st.error("Choose an .xlsx file first.")
-
-# ---------- run picker ----------
-runs = jobs.list_runs(conn, "checkin_sheet")
-if not runs:
-    st.info("Upload a check-in sheet (.xlsx) to start.")
-    st.stop()
-
-ids = [r["id"] for r in runs]
-labels = {r["id"]: f"Check-in {r['id']} · {r['filename']} · {STATUS_WORDS[r['status']]} · "
-                   f"{r['created_at'][:16].replace('T', ' ')}" for r in runs}
-chosen = st.session_state.get("checkin_run_id")
-run_id = st.selectbox("Check-in", ids, index=ids.index(chosen) if chosen in ids else 0, format_func=labels.get)
-st.session_state["checkin_run_id"] = run_id
 
 
 def _notes_tables(notes: dict) -> None:
@@ -57,45 +22,44 @@ def _notes_tables(notes: dict) -> None:
         st.caption("Tabs not read: " + ", ".join(notes["ignored_tabs"]))
 
 
-@st.fragment(run_every=5)
-def status_area(run_id: int) -> None:
-    status = conn.execute("SELECT status FROM runs WHERE id = ?", (run_id,)).fetchone()["status"]
-    pr = jobs.progress(conn, run_id)
+def _preview_details(conn, run_id, p) -> None:
     notes = jobs.run_notes(conn, run_id)
+    st.caption("From the tabs: " + ", ".join(f"{tab} {n}" for tab, n in notes["tabs"].items())
+               if notes["tabs"] else "No products found on the tabs.")
+    _notes_tables(notes)
 
-    if status == "ready":
-        p = jobs.preview(conn, run_id, int(db.get_setting(conn, "refresh_days")), datetime.now(timezone.utc),
-                         int(db.get_setting(conn, "retired_refresh_days")))
-        st.subheader("What this will do")
-        c = st.columns(3)
-        c[0].metric("New products", p.products)
-        c[1].metric("Players already known", p.subjects_fresh)
-        c[2].metric("Players to look up", p.subjects_to_research)
-        st.dataframe([{"Tab": tab, "Products": n} for tab, n in notes["tabs"].items()], hide_index=True)
-        _notes_tables(notes)
-        if p.products and st.button("Start", key=f"start-checkin-{run_id}", type="primary"):
-            jobs.set_run_status(conn, run_id, "running")
-            st.rerun(scope="fragment")
-    else:
-        progress_section(conn, run_id, status, pr)
+
+def _started_details(conn, run_id) -> None:
+    notes = jobs.run_notes(conn, run_id)
+    if notes["problems"] or notes["warnings"] or notes["ignored_tabs"]:
         with st.expander("Rows left out and warnings"):
             _notes_tables(notes)
 
-    activity_section(conn, run_id, status)
 
-    if pr.done > 0:
-        st.subheader("Downloads")
-        st.caption('Import as new products and leave "Overwrite products with matching handles" unticked, so '
-                   "existing products are never changed. Every product comes in as a draft.")
-        c = st.columns(2)
-        c[0].download_button("Download import CSV", lambda: output.build_checkin_csv(conn, run_id),
-                             file_name=f"shopify-new-products-{run_id}.csv", mime="text/csv", on_click="ignore",
-                             type="primary", width="stretch", icon=":material/download:",
-                             key=f"dl-checkin-{run_id}")
-        c[1].download_button("Download facts log", lambda: output.build_facts_csv(conn, run_id),
-                             file_name=f"facts-log-{run_id}.csv", mime="text/csv", on_click="ignore",
-                             width="stretch", icon=":material/description:",
-                             key=f"dl-checkin-facts-{run_id}")
+PAGE = RunPage(
+    noun="Check-in", input_kind="checkin_sheet", state_key="checkin_run_id",
+    empty_text="Upload a check-in sheet (.xlsx) to start.",
+    preview_details=_preview_details,
+    started_details=_started_details,
+    download_caption='Import as new products and leave "Overwrite products with matching handles" unticked, so '
+                     "existing products are never changed. Every product comes in as a draft.",
+    build_csv=output.build_checkin_csv,
+    csv_name="shopify-new-products-{run_id}.csv",
+)
 
+# ---------- upload ----------
+with st.form("upload-checkin", clear_on_submit=True):
+    uploaded = st.file_uploader("Check-in sheet", type=["xlsx"])
+    submitted = st.form_submit_button("Create products", key="create-checkin-run")
 
-status_area(run_id)
+if submitted and uploaded is not None:
+    path, name = save_upload(uploaded, "checkin.xlsx")
+    try:
+        st.session_state[PAGE.state_key] = jobs.create_checkin_run(conn, path, name)
+    except CheckinFormatError as e:
+        path.unlink(missing_ok=True)
+        st.error(str(e))
+elif submitted:
+    st.error("Choose an .xlsx file first.")
+
+run_status(run_picker(conn, PAGE), PAGE)
