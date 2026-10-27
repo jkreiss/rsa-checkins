@@ -6,7 +6,7 @@ import streamlit as st
 
 from rsa_checkins import config, db, jobs, output
 from rsa_checkins.shopify_export import ExportFormatError
-from rsa_checkins.ui import STATUS_WORDS, get_conn
+from rsa_checkins.ui import STATUS_WORDS, activity_section, get_conn, progress_section
 
 conn = get_conn()
 st.title("Shopify Product Export")
@@ -32,7 +32,7 @@ elif submitted:
     st.error("Choose a CSV file first.")
 
 # ---------- run picker ----------
-runs = jobs.list_runs(conn)
+runs = jobs.list_runs(conn, "shopify_export")
 if not runs:
     st.info("Upload a Shopify product export to start.")
     st.stop()
@@ -72,39 +72,9 @@ def status_area(run_id: int) -> None:
             jobs.set_run_status(conn, run_id, "running")
             st.rerun(scope="fragment")
     else:
-        if status == "done":
-            st.success(STATUS_WORDS["done"])
-        else:
-            st.write(f"**{STATUS_WORDS[status]}**")
-        st.progress((pr.done + pr.failed) / pr.total if pr.total else 1.0)
-        c = st.columns(4)
-        c[0].metric("Done", pr.done)
-        c[1].metric("Remaining", pr.pending)
-        c[2].metric("Failed", pr.failed)
-        c[3].metric("Reused", pr.reused)
-        if status == "running" and st.button("Pause", key=f"pause-{run_id}"):
-            jobs.set_run_status(conn, run_id, "paused")
-            st.rerun(scope="fragment")
-        if status == "paused" and st.button("Resume", key=f"resume-{run_id}", type="primary"):
-            jobs.set_run_status(conn, run_id, "running")
-            st.rerun(scope="fragment")
+        progress_section(conn, run_id, status, pr)
 
-    if status in ("running", "paused"):
-        activity = jobs.current_activity(conn, datetime.now(timezone.utc))
-        st.caption("Working on: " + ("; ".join(activity) if activity else "nothing right now"))
-    events = jobs.recent_events(conn, limit=10)
-    if events and status != "parsing":
-        with st.expander("Recent activity", expanded=status in ("running", "paused")):
-            for e in events:
-                st.text(f"{db.parse_iso(e['at']).astimezone():%H:%M}  {e['message']}")
-
-    failed = jobs.failed_products(conn, run_id)
-    if failed:
-        st.subheader(f"Failed products ({len(failed)})")
-        st.dataframe([{"Title": f["title"], "Reason": f["error"]} for f in failed], hide_index=True)
-        if st.button("Retry failed", key=f"retry-{run_id}"):
-            jobs.retry_failed(conn, run_id)
-            st.rerun(scope="fragment")
+    activity_section(conn, run_id, status)
 
     if pr.done > 0:
         st.subheader("Downloads")

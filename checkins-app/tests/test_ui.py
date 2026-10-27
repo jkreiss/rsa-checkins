@@ -10,7 +10,7 @@ from rsa_checkins.jobs import complete_product, create_run, set_run_status
 from rsa_checkins.players import get_or_create_subject, save_research
 
 APP_DIR = Path(__file__).resolve().parent.parent
-PAGES = ["pages/run.py", "pages/players.py", "pages/settings.py"]
+PAGES = ["pages/checkins.py", "pages/run.py", "pages/players.py", "pages/settings.py"]
 
 
 @pytest.fixture
@@ -199,3 +199,66 @@ def test_page_is_named_large_inventory_export(data_conn):
     assert at.button(key="create-run").label == "Update products"
     nav = (APP_DIR / "app.py").read_text()
     assert 'title="Large inventory export"' in nav
+
+
+# ---------- Checkins page ----------
+
+from checkin_fixture import make_workbook  # noqa: E402
+from rsa_checkins.jobs import create_checkin_run  # noqa: E402
+
+NO_CERT = {"sport": "Football", "league": "NFL", "type": "Custom", "inv": 1, "first-name": "Joe",
+           "last-name": "Namath", "team": "New York", "mascot": "Jets"}
+
+
+def _checkin_run(conn, tmp_path, extra=None):
+    return create_checkin_run(conn, make_workbook(tmp_path / "c.xlsx", extra), "c.xlsx")
+
+
+def test_checkins_is_first_and_default(data_conn):
+    nav = (APP_DIR / "app.py").read_text()
+    assert nav.index("pages/checkins.py") < nav.index("pages/run.py")
+    assert 'title="Checkins"' in nav and "default=True" in nav
+    at = _app("app.py")
+    assert not at.exception
+    assert at.title[0].value == "Checkins"
+
+
+def test_checkins_ready_run_shows_preview_and_start(data_conn, tmp_path):
+    run_id = _checkin_run(data_conn, tmp_path, {"jerseys": [NO_CERT]})
+    at = _app("pages/checkins.py")
+    assert not at.exception
+    tables = [df.value.to_string() for df in at.dataframe]
+    assert any("jerseys" in t for t in tables)
+    assert any("Joe Namath" in t and "cert" in t for t in tables)
+    assert "Start" in _labels(at, "button")
+    at.button(key=f"start-checkin-{run_id}").click().run()
+    assert data_conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()["status"] == "running"
+
+
+def test_checkins_download_caption(data_conn, tmp_path):
+    run_id = _checkin_run(data_conn, tmp_path)
+    p = data_conn.execute("SELECT id, seo_title FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()
+    set_run_status(data_conn, run_id, "running")
+    complete_product(data_conn, p["id"], "<p>a</p>", p["seo_title"])
+    at = _app("pages/checkins.py")
+    assert not at.exception
+    assert any('leave "Overwrite products with matching handles" unticked' in c.value for c in at.caption)
+    assert "Download import CSV" in _labels(at, "download_button")
+
+
+def test_checkins_has_upload_form(data_conn):
+    at = _app("pages/checkins.py")
+    assert at.button(key="create-checkin-run").label == "Read check-in sheet"
+
+
+def test_export_page_hides_checkin_runs(data_conn, tmp_path):
+    _checkin_run(data_conn, tmp_path)
+    at = _app("pages/run.py")
+    assert not at.exception
+    assert any("Upload a Shopify product export to start." in i.value for i in at.info)
+
+
+def test_checkins_page_hides_export_runs(data_conn):
+    create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    at = _app("pages/checkins.py")
+    assert any("Upload a check-in sheet" in i.value for i in at.info)

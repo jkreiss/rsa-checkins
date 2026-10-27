@@ -13,6 +13,7 @@ with st.sidebar:
         st.warning("Worker not running. Runs won't make progress until it starts.", icon="🔴")
 
 st.navigation([
+    st.Page("pages/checkins.py", title="Checkins", default=True),
     st.Page("pages/run.py", title="Shopify Product Export"),
     st.Page("pages/players.py", title="Player Information"),
     st.Page("pages/settings.py", title="Settings"),
