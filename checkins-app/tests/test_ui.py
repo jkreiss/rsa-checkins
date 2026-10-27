@@ -323,3 +323,20 @@ def test_no_downloads_until_the_run_is_finished(data_conn, tmp_path, status):
         at = _app(page)
         assert not at.exception
         assert at.get("download_button") == [] and "Downloads" not in [h.value for h in at.subheader]
+
+
+@pytest.mark.parametrize("upload,kind,expected", [
+    ("products export 10.20.csv", "product-update-import", "products export 10.20-product-update-import.csv"),
+    ("Football checkin sheet.xlsx", "new-product-import", "Football checkin sheet-new-product-import.csv"),
+    ("Football checkin sheet.xlsx", "facts-log", "Football checkin sheet-facts-log.csv"),
+    ("noext", "facts-log", "noext-facts-log.csv"),
+    ("", "new-product-import", "upload-new-product-import.csv"),
+])
+def test_download_names_follow_the_upload(upload, kind, expected):
+    from rsa_checkins.ui import download_name
+    assert download_name(upload, kind) == expected
+
+
+def test_pages_name_their_downloads():
+    assert 'download_suffix="product-update-import"' in (APP_DIR / "views/run.py").read_text()
+    assert 'download_suffix="new-product-import"' in (APP_DIR / "views/checkins.py").read_text()

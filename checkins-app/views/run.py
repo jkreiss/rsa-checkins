@@ -21,7 +21,7 @@ PAGE = RunPage(
     download_caption="Import with \"Overwrite products with matching handles\" ticked. A product deleted or renamed in "
                      "Shopify since this export was taken would come back as a new product.",
     build_csv=lambda conn, run_id: output.build_output_csv(conn, run_id, db.get_setting(conn, "output_columns")),
-    csv_name="shopify-import-{run_id}.csv",
+    download_suffix="product-update-import",
 )
 
 # ---------- upload ----------

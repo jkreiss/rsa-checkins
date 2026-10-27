@@ -94,8 +94,13 @@ class RunPage:
     preview_details: Callable[[sqlite3.Connection, int, "jobs.Preview"], None]   # under the three numbers
     download_caption: str
     build_csv: Callable[[sqlite3.Connection, int], bytes]
-    csv_name: str                                 # file name, with {run_id}
+    download_suffix: str                          # import file: "<upload name>-<suffix>.csv"
     started_details: Callable[[sqlite3.Connection, int], None] | None = None     # under the progress
+
+
+def download_name(upload_name: str, suffix: str) -> str:
+    """A download named after the uploaded file: "Football checkin sheet.xlsx" -> "Football checkin sheet-<suffix>.csv"."""
+    return f"{Path(upload_name).stem or 'upload'}-{suffix}.csv"
 
 
 @contextmanager
@@ -167,8 +172,9 @@ def run_status(run_id: int, page: RunPage) -> None:
         st.caption(page.download_caption)
         c = st.columns(2)
         c[0].download_button("Download import CSV", lambda: page.build_csv(conn, run_id),
-                             file_name=page.csv_name.format(run_id=run_id), mime="text/csv", on_click="ignore",
+                             file_name=download_name(run["filename"], page.download_suffix), mime="text/csv",
+                             on_click="ignore",
                              type="primary", width="stretch", icon=":material/download:", key=f"dl-import-{run_id}")
         c[1].download_button("Download facts log", lambda: output.build_facts_csv(conn, run_id),
-                             file_name=f"facts-log-{run_id}.csv", mime="text/csv", on_click="ignore",
+                             file_name=download_name(run["filename"], "facts-log"), mime="text/csv", on_click="ignore",
                              width="stretch", icon=":material/description:", key=f"dl-facts-{run_id}")

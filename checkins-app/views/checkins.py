@@ -44,7 +44,7 @@ PAGE = RunPage(
     download_caption='Import as new products and leave "Overwrite products with matching handles" unticked, so '
                      "existing products are never changed. Every product comes in as a draft.",
     build_csv=output.build_checkin_csv,
-    csv_name="shopify-new-products-{run_id}.csv",
+    download_suffix="new-product-import",
 )
 
 # ---------- upload ----------
