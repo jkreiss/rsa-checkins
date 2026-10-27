@@ -88,3 +88,28 @@ seo_title - at most 70 characters:
 - Unsigned: no "Autographed" and no authentication part, e.g. "Jim Kelly Buffalo Bills Salute to Service Nike Jersey".
 
 Never mention a certificate of authenticity or "COA" anywhere. Don't mention authentication or the guarantee in sentence1, call_to_action or note - the store adds that sentence itself."""
+
+# Check-in sheet (Part 2): the same on every product, copied from the workbook's example rows.
+CHECKIN_FIXED_VALUES = {
+    "Vendor": "RSA",
+    "Product Category": "Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Autographs",
+    "Published": "FALSE",
+    "Option1 Name": "Title",
+    "Option1 Value": "Default Title",
+    "Variant Inventory Tracker": "shopify",
+    "Variant Inventory Policy": "deny",
+    "Variant Fulfillment Service": "manual",
+    "Variant Requires Shipping": "TRUE",
+    "Variant Taxable": "TRUE",
+    "Gift Card": "FALSE",
+    "Google Shopping / Google Product Category":
+        "Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Autographs",
+    "Google Shopping / Condition": "New",
+    "Variant Weight Unit": "oz",
+    "Included / United States": "TRUE",
+    "Included / International": "TRUE",
+    "Status": "draft",
+}
+
+# Product Type per check-in tab. Tabs not listed get no Type (owner: "don't worry about type for now").
+CHECKIN_TYPES = {"jerseys": "Autographed Football Jerseys"}

@@ -114,3 +114,127 @@ def test_cert_name():
     assert cert_name("jsa") == "JSA"
     assert cert_name("Beckett") == "Beckett"
     assert cert_name("SGC") == "SGC"
+
+
+# ---- Task 3: one row -> every Shopify column ----
+
+from rsa_checkins.checkin_build import Built, Problem, build, money, whole  # noqa: E402
+from rsa_checkins.checkin_sheet import RawRow, read_workbook  # noqa: E402
+from rsa_checkins.config import (METAFIELD_AUTHENTICITY, METAFIELD_LEAGUE, METAFIELD_PLAYER,  # noqa: E402
+                                 METAFIELD_SPORT, METAFIELD_TEAM, METAFIELD_WHOLESALE, TEMPLATE_COLUMNS)
+from checkin_fixture import make_workbook  # noqa: E402
+
+
+@pytest.fixture
+def sheet(tmp_path):
+    return read_workbook(make_workbook(tmp_path / "c.xlsx")).rows
+
+
+def _row(sheet, last, **match):
+    return next(r for r in sheet if r.values["last"] == last and all(r.values[k] == v for k, v in match.items()))
+
+
+def test_template_columns():
+    assert len(TEMPLATE_COLUMNS) == 88
+    assert TEMPLATE_COLUMNS[0] == "Handle"
+    assert TEMPLATE_COLUMNS.index(METAFIELD_WHOLESALE) == TEMPLATE_COLUMNS.index("Text (product.metafields.custom.text)") + 1
+    assert "Option1 Name" in TEMPLATE_COLUMNS and "Variant Barcodes" in TEMPLATE_COLUMNS
+
+
+def test_build_keenan_authentic(sheet):
+    b = build(_row(sheet, "Allen", jersey_type="Authentic"))
+    assert isinstance(b, Built)
+    c = b.columns
+    assert c["Title"] == "Keenan Allen Autographed Indianapolis Colts Authentic NFL White Mitchell & Ness Jersey - JSA"
+    assert (c["Vendor"], c["Published"], c["Status"]) == ("RSA", "FALSE", "draft")
+    assert c["Type"] == "Autographed Football Jerseys"
+    assert c["Variant Price"] == "349.99"
+    assert c["Variant Compare At Price"] == "400.00"
+    assert c["Cost per item"] == "150.00"
+    assert c[METAFIELD_WHOLESALE] == "200.00"
+    assert c["Variant Inventory Qty"] == "15"
+    assert c["Variant Grams"] == "896"
+    assert c["Variant Weight Unit"] == "oz"
+    assert c["Tags"] == "Jerseys, Current, Colts, Authentic, NFL, Green Bag, FB, Imported"
+    assert c["SEO Title"] == "Keenan Allen Autographed Indianapolis Jersey - JSA Authentication"
+    assert c["Image Alt Text"] == "Keenan Allen Autographed Jersey"
+    assert (c[METAFIELD_AUTHENTICITY], c[METAFIELD_LEAGUE], c[METAFIELD_PLAYER], c[METAFIELD_SPORT],
+            c[METAFIELD_TEAM]) == ("JSA", "NFL", "Keenan Allen", "Football", "Indianapolis Colts")
+    assert (c["Option1 Name"], c["Option1 Value"]) == ("Title", "Default Title")
+    assert c["Product Category"] == "Arts & Entertainment > Hobbies & Creative Arts > Collectibles > Autographs"
+    assert "Handle" not in c and "Body (HTML)" not in c
+    assert set(c) <= set(TEMPLATE_COLUMNS)
+    assert b.warnings == []
+    assert (b.auth, b.player, b.seo_title) == ("JSA", "Keenan Allen", c["SEO Title"])
+
+
+def test_build_other_tabs_have_no_type(sheet):
+    c = build(_row(sheet, "Griese")).columns
+    assert c["Type"] == ""
+    assert c[METAFIELD_SPORT] == "Football"
+    assert c[METAFIELD_TEAM] == "Miami Dolphins"
+    assert c["Variant Grams"] == "3584"
+
+
+def test_ncaa_team_blank(sheet):
+    b = build(_row(sheet, "Kamara"))
+    assert b.columns[METAFIELD_TEAM] == ""
+    assert b.columns[METAFIELD_LEAGUE] == "NCAA"
+    assert b.team_for_ai == "Tennessee Volunteers"
+
+
+def test_mascot_looked_up(sheet):
+    jaws = build(_row(sheet, "Jaworski"))
+    assert jaws.columns[METAFIELD_TEAM] == "Philadelphia Eagles"
+    assert jaws.warnings == []
+    assert "Eagles" in jaws.columns["Tags"]
+    blount = build(_row(sheet, "Blount"))
+    assert blount.columns[METAFIELD_TEAM] == "Tampa Bay Buccaneers"
+    assert blount.columns["Variant Price"] == "69.99"
+
+
+def _raw(tab="jerseys", **kw):
+    base = dict(jersey_type="Custom", first="Kevin", last="Mawae", city="Philadelphia", cert="JSA")
+    return RawRow(tab, 9, _v(**{**base, **kw}))
+
+
+def test_mascot_not_found_warns():
+    b = build(_raw(city="New York"))
+    assert isinstance(b, Built)
+    assert b.columns[METAFIELD_TEAM] == ""
+    assert any("mascot" in w for w in b.warnings)
+
+
+def test_bad_numbers_warn():
+    b = build(_raw(mascot="Eagles", price="call", inv="1.5"))
+    assert b.columns["Variant Price"] == ""
+    assert b.columns["Variant Inventory Qty"] == ""
+    assert any("price" in w for w in b.warnings)
+    assert any("inv" in w for w in b.warnings)
+
+
+def test_authenticity_limited():
+    b = build(_raw(mascot="Eagles", cert="SGC"))
+    assert b.columns[METAFIELD_AUTHENTICITY] == ""
+    assert b.columns["Title"].endswith("- SGC")
+    assert any("SGC" in w for w in b.warnings)
+
+
+def test_problems():
+    for raw, word in [(_raw(first=""), "name"), (_raw(cert=""), "cert"),
+                      (_raw(jersey_type="Replica"), "Custom or Authentic")]:
+        p = build(raw)
+        assert isinstance(p, Problem), raw
+        assert word in p.reason
+        assert (p.tab, p.row) == ("jerseys", 9)
+
+
+@pytest.mark.parametrize("value,out", [("$349.99", "349.99"), ("69.98999999999999", "69.99"),
+                                       ("1,200", "1200.00"), ("", ""), ("x", None)])
+def test_money(value, out):
+    assert money(value) == out
+
+
+@pytest.mark.parametrize("value,out", [("15", "15"), ("", ""), ("1.5", None), ("ten", None)])
+def test_whole(value, out):
+    assert whole(value) == out

@@ -3,7 +3,14 @@
 The patterns come from each tab's example row in the check-in workbook
 (see docs/superpowers/specs/2026-10-27-checkins-sheet-design.md §4).
 """
-from .rules import AUTHENTICATOR_CASE, SPORT_CODES
+from dataclasses import dataclass, field
+
+from . import teams
+from .checkin_sheet import RawRow
+from .config import (METAFIELD_AUTHENTICITY, METAFIELD_LEAGUE, METAFIELD_PLAYER, METAFIELD_SPORT,
+                     METAFIELD_TEAM, METAFIELD_WHOLESALE)
+from .descriptions import sport_value
+from .rules import AUTHENTICATOR_CASE, AUTHENTICITY_VALUES, CHECKIN_FIXED_VALUES, CHECKIN_TYPES, SPORT_CODES
 
 SEO_MAX = 70
 _JERSEY_SPORTS = {"Football", "Baseball", "Basketball", "Hockey", "Soccer"}
@@ -96,3 +103,119 @@ def tags_for(tab: str, v: dict) -> str:
     else:  # fb-balls
         tags = [v["league"], v["mascot"], "Imported", v["player_type"], v["bag"], code]
     return ", ".join(t for t in tags if t)
+
+
+# ---- One row -> every Shopify column ----
+
+@dataclass
+class Built:
+    tab: str
+    row: int
+    player: str
+    title: str
+    seo_title: str
+    product_type: str
+    tags: str
+    auth: str
+    team_for_ai: str
+    league: str
+    columns: dict[str, str]
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Problem:
+    tab: str
+    row: int
+    name: str
+    reason: str
+
+
+def _number(value: str) -> float | None:
+    try:
+        return float(value.replace("$", "").replace(",", "").strip())
+    except ValueError:
+        return None
+
+
+def money(value: str) -> str | None:
+    """Money with 2 decimals ("$349.99" -> "349.99"); "" stays ""; None when it isn't a number."""
+    if not value.strip():
+        return ""
+    n = _number(value)
+    return None if n is None else f"{n:.2f}"
+
+
+def whole(value: str) -> str | None:
+    """A whole number ("15"); "" stays ""; None when it isn't one."""
+    if not value.strip():
+        return ""
+    n = _number(value)
+    return None if n is None or not n.is_integer() else str(int(n))
+
+
+# Shopify column <- sheet meaning, and how the value is checked.
+_MONEY = {"Variant Price": "price", "Variant Compare At Price": "compare", "Cost per item": "cost",
+          METAFIELD_WHOLESALE: "ws"}
+
+
+def build(raw: RawRow) -> Built | Problem:
+    v = dict(raw.values)
+    name = _name(v)
+    if not (v["first"] and v["last"]):
+        return Problem(raw.tab, raw.row, name, "no first or last name")
+    if not v["cert"]:
+        return Problem(raw.tab, raw.row, name, "no cert")
+    if raw.tab == "jerseys" and v["jersey_type"].lower() not in ("custom", "authentic"):
+        return Problem(raw.tab, raw.row, name,
+                       f"jersey type is \"{v['jersey_type']}\"; it must be Custom or Authentic")
+
+    warnings = []
+    if not v["mascot"]:
+        v["mascot"] = teams.mascot_for(v["league"], v["city"])
+        if not v["mascot"]:
+            warnings.append(f"mascot not found for {v['city'] or '(no team)'} ({v['league'] or 'no league'}); "
+                            "left out of the title, tags and Team")
+
+    title, seo = title_for(raw.tab, v), seo_title_for(raw.tab, v)
+    cert = cert_name(v["cert"])
+    auth = cert if cert in AUTHENTICITY_VALUES else ""
+    if not auth:
+        warnings.append(f"cert {cert} isn't one of {', '.join(AUTHENTICITY_VALUES)}; Authenticity left blank")
+    ncaa = _is_ncaa(v)
+    team_for_ai = _join(v["city"], v["mascot"]) if v["mascot"] else ""
+    tags = tags_for(raw.tab, v)
+    product_type = CHECKIN_TYPES.get(raw.tab, "")
+
+    columns = {
+        **CHECKIN_FIXED_VALUES,
+        "Title": title,
+        "Type": product_type,
+        "Tags": tags,
+        "Variant SKU": v["sku"],
+        "Variant Barcodes": v["upc"],
+        "Image Alt Text": alt_text_for(raw.tab, v),
+        "SEO Title": seo,
+        METAFIELD_AUTHENTICITY: auth,
+        METAFIELD_LEAGUE: v["league"],
+        METAFIELD_PLAYER: name,
+        METAFIELD_SPORT: sport_value(v["sport"], "", ""),
+        METAFIELD_TEAM: "" if ncaa else team_for_ai,
+    }
+    for column, meaning in _MONEY.items():
+        value = money(v[meaning])
+        if value is None:
+            warnings.append(f"{meaning} \"{v[meaning]}\" isn't a number; left blank")
+        columns[column] = value or ""
+    qty = whole(v["inv"])
+    if qty is None:
+        warnings.append(f"inv \"{v['inv']}\" isn't a whole number; left blank")
+    columns["Variant Inventory Qty"] = qty or ""
+    weight = _number(v["weight"]) if v["weight"] else None
+    if v["weight"] and weight is None:
+        warnings.append(f"weight \"{v['weight']}\" isn't a number; Variant Grams left blank")
+    grams = 28 * weight if weight is not None else None
+    columns["Variant Grams"] = "" if grams is None else (str(int(grams)) if grams.is_integer() else f"{grams:g}")
+
+    return Built(raw.tab, raw.row, name, title, seo, product_type, tags, cert, team_for_ai, v["league"],
+                 columns, warnings)
