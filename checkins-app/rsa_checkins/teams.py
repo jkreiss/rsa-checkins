@@ -229,3 +229,10 @@ def team_city(full_name: str) -> str:
     """The place part of a team name ("Dallas Cowboys" -> "Dallas"), or "" if unknown."""
     team = _BY_FULL.get(full_name)
     return team.city if team else ""
+
+
+def mascot_for(league: str, city: str) -> str:
+    """The nickname when exactly one team in that league plays in that city ("NFL", "Pittsburgh" -> "Steelers")."""
+    league, city = league.strip().lower(), city.strip().lower()
+    found = [t.nickname for t in TEAMS if t.league.lower() == league and t.city.lower() == city]
+    return found[0] if len(found) == 1 else ""
