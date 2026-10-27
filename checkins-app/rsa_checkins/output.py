@@ -5,7 +5,7 @@ import json
 import sqlite3
 
 from .config import (METAFIELD_AUTHENTICITY, METAFIELD_COLUMNS, METAFIELD_LEAGUE, METAFIELD_PLAYER,  # noqa: F401
-                     METAFIELD_SPORT, METAFIELD_TEAM, METAFIELD_WHOLESALE, OPTION_COLUMNS)
+                     METAFIELD_SPORT, METAFIELD_TEAM, METAFIELD_WHOLESALE, OPTION_COLUMNS, TEMPLATE_COLUMNS)
 from .descriptions import authenticity_value, sport_value
 
 REQUIRED = ("Handle", "Title", *OPTION_COLUMNS)   # always in the output, whatever the saved setting
@@ -113,4 +113,15 @@ def build_facts_csv(conn: sqlite3.Connection, run_id: int) -> bytes:
     w.writerow(["Player", "Fact", "Source URL", "Checked"])
     for r in rows:
         w.writerow([_quote_formula(r["name"]), _quote_formula(r["fact"]), _safe_url(r["source_url"]), r["checked_at"]])
+    return buf.getvalue().encode("utf-8")
+
+
+def build_checkin_csv(conn: sqlite3.Connection, run_id: int) -> bytes:
+    """The check-in import file: every "Updates Template.csv" column, one row per finished product."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(TEMPLATE_COLUMNS)
+    for p in conn.execute("SELECT * FROM products WHERE run_id = ? AND state = 'done' ORDER BY id", (run_id,)):
+        columns = {**json.loads(p["first_row"]), "Handle": p["handle"], "Body (HTML)": p["description_html"] or ""}
+        w.writerow([columns.get(c, "") for c in TEMPLATE_COLUMNS])
     return buf.getvalue().encode("utf-8")

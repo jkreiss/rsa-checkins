@@ -137,3 +137,43 @@ def test_worker_writes_checkin_product(conn, tmp_path, fake_client_factory):
     item = next(p for p in sent["products"] if p["handle"] == KEENAN)
     assert item["authenticator"] == "JSA"
     assert item["team"] == "Indianapolis Colts"
+
+
+# ---- Task 5: the import file ----
+
+import csv  # noqa: E402
+import io  # noqa: E402
+
+from rsa_checkins.config import TEMPLATE_COLUMNS  # noqa: E402
+from rsa_checkins.jobs import complete_product  # noqa: E402
+from rsa_checkins.output import build_checkin_csv  # noqa: E402
+
+
+def _csv(data: bytes):
+    return list(csv.DictReader(io.StringIO(data.decode("utf-8")))), next(csv.reader(io.StringIO(data.decode("utf-8"))))
+
+
+def test_checkin_csv(conn, tmp_path):
+    run_id = _run(conn, tmp_path)
+    rows = _products(conn, run_id)
+    for p in rows[:2]:
+        complete_product(conn, p["id"], "<p>a</p>", p["seo_title"])
+    data = build_checkin_csv(conn, run_id)
+    assert not data.startswith(b"\xef\xbb\xbf")
+    out, header = _csv(data)
+    assert header == TEMPLATE_COLUMNS
+    assert len(out) == 2
+    keenan = out[0]
+    assert keenan["Handle"] == KEENAN
+    assert keenan["Title"] == "Keenan Allen Autographed Indianapolis Colts Authentic NFL White Mitchell & Ness Jersey - JSA"
+    assert (keenan["Variant Price"], keenan["Status"], keenan["Published"]) == ("349.99", "draft", "FALSE")
+    assert keenan["Body (HTML)"] == "<p>a</p>"
+    assert keenan["SEO Title"] == "Keenan Allen Autographed Indianapolis Jersey - JSA Authentication"
+    assert keenan["Image Src"] == ""
+    assert out[1]["Handle"] == f"{KEENAN.replace('colts-authentic-nfl-white-mitchell-ness', 'blue-throwback-football')}"
+
+
+def test_checkin_csv_only_done(conn, tmp_path):
+    run_id = _run(conn, tmp_path)
+    out, _ = _csv(build_checkin_csv(conn, run_id))
+    assert out == []
