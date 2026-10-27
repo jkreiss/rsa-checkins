@@ -12,7 +12,7 @@ RUN useradd --uid 1000 --create-home appuser \
     && chown appuser:appuser /app/data
 
 COPY rsa_checkins/ rsa_checkins/
-COPY pages/ pages/
+COPY views/ views/
 COPY app.py .
 
 USER appuser

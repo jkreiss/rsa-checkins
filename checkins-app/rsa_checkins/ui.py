@@ -162,7 +162,7 @@ def run_status(run_id: int, page: RunPage) -> None:
 
     activity_section(conn, run_id, status)
 
-    if pr.done > 0:
+    if status == "done" and pr.done > 0:   # only once the whole run is finished
         st.subheader("Downloads")
         st.caption(page.download_caption)
         c = st.columns(2)

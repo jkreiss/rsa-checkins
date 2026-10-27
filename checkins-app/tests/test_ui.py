@@ -10,7 +10,7 @@ from rsa_checkins.jobs import complete_product, create_run, set_run_status
 from rsa_checkins.players import get_or_create_subject, save_research
 
 APP_DIR = Path(__file__).resolve().parent.parent
-PAGES = ["pages/checkins.py", "pages/run.py", "pages/players.py", "pages/settings.py"]
+PAGES = ["views/checkins.py", "views/run.py", "views/players.py", "views/settings.py"]
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_pages_render_on_empty_db(data_conn, page):
 def test_ready_run_shows_start(data_conn):
     run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
     data_conn.execute("UPDATE runs SET status='ready' WHERE id=?", (run_id,))
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert not at.exception
     assert "Start" in _labels(at, "button")
     at.button(key=f"start-{run_id}").click().run()
@@ -59,7 +59,7 @@ def test_ready_run_shows_start(data_conn):
 
 def test_parsing_run_says_reading_titles(data_conn):
     create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert any("Reading product titles" in i.value for i in at.info)
 
 
@@ -68,7 +68,7 @@ def test_done_run_shows_two_downloads(data_conn):
     pid = data_conn.execute("SELECT id FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()["id"]
     complete_product(data_conn, pid, "<p>a</p><p>b</p>", "seo")
     data_conn.execute("UPDATE runs SET status='done' WHERE id=?", (run_id,))
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert not at.exception
     buttons = at.get("download_button")
     assert [b.proto.label for b in buttons] == ["Download import CSV", "Download facts log"]
@@ -81,7 +81,7 @@ def _uploads_kept() -> list:
 
 
 def test_upload_creates_one_run(data_conn):
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     at.file_uploader[0].set_value(("export.csv", FIX.read_bytes(), "text/csv"))
     at.button(key="create-run").click().run()
     assert not at.exception
@@ -92,7 +92,7 @@ def test_upload_creates_one_run(data_conn):
 
 
 def test_upload_wrong_file_shows_error(data_conn):
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     at.file_uploader[0].set_value(("../../evil.csv", b"a,b\n1,2\n", "text/csv"))
     at.button(key="create-run").click().run()
     assert any("Missing columns" in e.value for e in at.error)
@@ -104,7 +104,7 @@ def test_failed_products_listed_with_retry(data_conn):
     run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
     data_conn.execute("UPDATE products SET state='failed', error='Research failed for X: boom' WHERE run_id=?", (run_id,))
     data_conn.execute("UPDATE runs SET status='done' WHERE id=?", (run_id,))
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert "Retry failed" in _labels(at, "button")
     at.button(key=f"retry-{run_id}").click().run()
     assert data_conn.execute("SELECT COUNT(*) FROM products WHERE state='pending'").fetchone()[0] == 10
@@ -114,7 +114,7 @@ def test_players_page_edits_facts(data_conn):
     sid = get_or_create_subject(data_conn, "Tee Higgins", "person")
     save_research(data_conn, sid, Research("Tee Higgins", "active", "Football", ["Bengals"], "Bengals",
                                            [Fact("Drafted 2020", "https://a")]))
-    at = _app("pages/players.py")
+    at = _app("views/players.py")
     at.text_input(key="player-search").input("higgins").run()
     assert not at.exception
     fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
@@ -132,7 +132,7 @@ def test_players_page_edits_facts(data_conn):
 
 
 def test_settings_saved(data_conn):
-    at = _app("pages/settings.py")
+    at = _app("views/settings.py")
     at.number_input(key="refresh_days").set_value(30).run()
     at.number_input(key="retired_refresh_days").set_value(365).run()
     at.button(key="save-settings").click().run()
@@ -146,7 +146,7 @@ def test_settings_saved(data_conn):
 def test_error_run_offers_try_again(data_conn):
     run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
     data_conn.execute("UPDATE runs SET status='error', error='bad key' WHERE id=?", (run_id,))
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert any("bad key" in e.value for e in at.error)
     at.button(key=f"try-again-{run_id}").click().run()
     assert data_conn.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()["status"] == "parsing"
@@ -157,7 +157,7 @@ def test_running_run_shows_activity(data_conn):
     run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
     data_conn.execute("UPDATE runs SET status='running' WHERE id=?", (run_id,))
     log_event(data_conn, "Looked up Tee Higgins (3 facts)")
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert not at.exception
     assert any("Looked up Tee Higgins (3 facts)" in t.value for t in at.text)
 
@@ -166,14 +166,14 @@ def test_download_warns_about_missing_handles(data_conn):
     run_id = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
     pid = data_conn.execute("SELECT id FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()["id"]
     complete_product(data_conn, pid, "<p>a</p><p>b</p>", "seo")
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert any("new product" in c.value and "test import" in c.value for c in at.caption)
 
 
 def test_cancel_edit_keeps_the_fact(data_conn):
     sid = get_or_create_subject(data_conn, "Tee Higgins", "person")
     save_research(data_conn, sid, Research("Tee Higgins", "active", "Football", [], None, [Fact("Drafted 2020", "https://a")]))
-    at = _app("pages/players.py")
+    at = _app("views/players.py")
     at.text_input(key="player-search").input("higgins").run()
     fid = data_conn.execute("SELECT id FROM facts").fetchone()["id"]
     at.button(key=f"edit-{fid}").click().run()
@@ -187,7 +187,7 @@ def test_delete_from_edit_mode(data_conn):
     sid = get_or_create_subject(data_conn, "Tee Higgins", "person")
     save_research(data_conn, sid, Research("Tee Higgins", "active", "Football", [], None,
                                            [Fact("Wrong fact", "https://a"), Fact("Right fact", "https://b")]))
-    at = _app("pages/players.py")
+    at = _app("views/players.py")
     at.text_input(key="player-search").input("higgins").run()
     wrong = data_conn.execute("SELECT id FROM facts WHERE fact='Wrong fact'").fetchone()["id"]
     at.button(key=f"edit-{wrong}").click().run()
@@ -198,7 +198,7 @@ def test_delete_from_edit_mode(data_conn):
 
 
 def test_page_is_named_large_inventory_export(data_conn):
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert at.title[0].value == "Large inventory export"
     assert at.button(key="create-run").label == "Update products"
     nav = (APP_DIR / "app.py").read_text()
@@ -220,7 +220,7 @@ def _checkin_run(conn, tmp_path, extra=None):
 
 def test_checkins_is_first_and_default(data_conn):
     nav = (APP_DIR / "app.py").read_text()
-    assert nav.index("pages/checkins.py") < nav.index("pages/run.py")
+    assert nav.index("views/checkins.py") < nav.index("views/run.py")
     assert 'title="Checkins"' in nav and "default=True" in nav
     at = _app("app.py")
     assert not at.exception
@@ -229,7 +229,7 @@ def test_checkins_is_first_and_default(data_conn):
 
 def test_checkins_ready_run_shows_preview_and_start(data_conn, tmp_path):
     run_id = _checkin_run(data_conn, tmp_path, {"jerseys": [NO_CERT]})
-    at = _app("pages/checkins.py")
+    at = _app("views/checkins.py")
     assert not at.exception
     assert any("jerseys 5" in c.value for c in at.caption)
     tables = [df.value.to_string() for df in at.dataframe]
@@ -244,27 +244,28 @@ def test_checkins_download_caption(data_conn, tmp_path):
     p = data_conn.execute("SELECT id, seo_title FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()
     set_run_status(data_conn, run_id, "running")
     complete_product(data_conn, p["id"], "<p>a</p>", p["seo_title"])
-    at = _app("pages/checkins.py")
+    data_conn.execute("UPDATE runs SET status='done' WHERE id=?", (run_id,))
+    at = _app("views/checkins.py")
     assert not at.exception
     assert any('leave "Overwrite products with matching handles" unticked' in c.value for c in at.caption)
     assert "Download import CSV" in _labels(at, "download_button")
 
 
 def test_checkins_has_upload_form(data_conn):
-    at = _app("pages/checkins.py")
+    at = _app("views/checkins.py")
     assert at.button(key="create-checkin-run").label == "Create products"
 
 
 def test_export_page_hides_checkin_runs(data_conn, tmp_path):
     _checkin_run(data_conn, tmp_path)
-    at = _app("pages/run.py")
+    at = _app("views/run.py")
     assert not at.exception
     assert any("Upload a Shopify product export to start." in i.value for i in at.info)
 
 
 def test_checkins_page_hides_export_runs(data_conn):
     create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
-    at = _app("pages/checkins.py")
+    at = _app("views/checkins.py")
     assert any("Upload a check-in sheet" in i.value for i in at.info)
 
 
@@ -273,7 +274,7 @@ def test_both_run_pages_preview_the_same_way(data_conn, tmp_path):
     data_conn.execute("UPDATE runs SET status='ready' WHERE id=?", (export,))
     _checkin_run(data_conn, tmp_path)
     shown = []
-    for page in ("pages/run.py", "pages/checkins.py"):
+    for page in ("views/run.py", "views/checkins.py"):
         at = _app(page)
         assert not at.exception
         shown.append(([m.label for m in at.metric], [s.value for s in at.subheader][:1], "Start" in _labels(at, "button")))
@@ -282,7 +283,7 @@ def test_both_run_pages_preview_the_same_way(data_conn, tmp_path):
 
 
 def test_checkins_upload_creates_run_and_keeps_no_file(data_conn, tmp_path):
-    at = _app("pages/checkins.py")
+    at = _app("views/checkins.py")
     data = make_workbook(tmp_path / "c.xlsx").read_bytes()
     at.file_uploader[0].set_value(("checkin.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
     at.button(key="create-checkin-run").click().run()
@@ -293,8 +294,32 @@ def test_checkins_upload_creates_run_and_keeps_no_file(data_conn, tmp_path):
 
 
 def test_checkins_wrong_file_shows_error_and_keeps_no_file(data_conn):
-    at = _app("pages/checkins.py")
+    at = _app("views/checkins.py")
     at.file_uploader[0].set_value(("notes.xlsx", b"not a workbook", "application/octet-stream"))
     at.button(key="create-checkin-run").click().run()
     assert at.error and data_conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
     assert _uploads_kept() == []
+
+
+def test_no_pages_folder():
+    # A folder named "pages" next to app.py makes Streamlit's first load after a restart list the files
+    # ("app, checkins, run...") instead of the app's own menu. The pages live in "views" instead.
+    assert not (APP_DIR / "pages").exists()
+    nav = (APP_DIR / "app.py").read_text()
+    assert all((APP_DIR / p).exists() for p in ("views/checkins.py", "views/run.py", "views/players.py",
+                                                  "views/settings.py"))
+    assert '"views/checkins.py"' in nav and '"pages/' not in nav
+
+
+@pytest.mark.parametrize("status", ["running", "paused"])
+def test_no_downloads_until_the_run_is_finished(data_conn, tmp_path, status):
+    export = create_run(data_conn, FIX, "export_small.csv", include_drafts=True)
+    checkin = _checkin_run(data_conn, tmp_path)
+    for run_id in (export, checkin):
+        pid = data_conn.execute("SELECT id FROM products WHERE run_id=? LIMIT 1", (run_id,)).fetchone()["id"]
+        complete_product(data_conn, pid, "<p>a</p><p>b</p>", "seo")       # some done, others still to write
+        data_conn.execute("UPDATE runs SET status=? WHERE id=?", (status, run_id))
+    for page in ("views/run.py", "views/checkins.py"):
+        at = _app(page)
+        assert not at.exception
+        assert at.get("download_button") == [] and "Downloads" not in [h.value for h in at.subheader]
