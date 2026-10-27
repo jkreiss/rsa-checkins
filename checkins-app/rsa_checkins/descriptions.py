@@ -46,18 +46,15 @@ def sport_from_title(title: str) -> str:
 
 
 def sport_value(existing: str, tags: str, title: str = "") -> str:
-    """The Sport column, always as a code (owner, 2026-10-22).
+    """The Sport column, always as the full word: BS -> "Baseball" (owner, 2026-10-27).
 
-    A sport word in the title wins, then the code in the tags, then the existing value converted
-    ("Football" -> "FB"). A value that isn't one of the six sports is left as it is.
+    A sport word in the title wins, then the code in the tags, then the existing value (a code is written
+    out, "FB" -> "Football"). A value that isn't one of the six sports is left as it is.
     """
-    code = sport_from_title(title) or sport_from_tags(tags)
-    if code:
-        return code
     e = (existing or "").strip()
-    if e.upper() in SPORT_CODES:
-        return e.upper()
-    return _SPORT_WORD_TO_CODE.get(e.lower(), e)
+    code = (sport_from_title(title) or sport_from_tags(tags)
+            or (e.upper() if e.upper() in SPORT_CODES else _SPORT_WORD_TO_CODE.get(e.lower(), "")))
+    return SPORT_CODES[code] if code else e
 
 
 def auth_sentence(title: str, kind: str, rotation: int) -> str:

@@ -33,7 +33,7 @@ def test_authenticity_and_sport_values():
     assert authenticity_value("X Signed Ball (Fanatics/MLB)") == "Fanatics"
     assert authenticity_value("X Signed Ball (MLB)") == ""
     assert authenticity_value("X Signed Jersey (JSA WB877012)") == "JSA"
-    assert sport_from_tags("Eagles, FB, imported, jersey") == "FB"   # the Sport column holds the code
+    assert sport_from_tags("Eagles, FB, imported, jersey") == "FB"   # the code; sport_value writes it out
     assert sport_from_tags("Categorized, ET, In-Stock") == ""
     assert sport_from_tags("fb, football") == ""
 
@@ -117,13 +117,14 @@ def test_item_word(product_type, title, expected):
 
 
 @pytest.mark.parametrize("existing,tags,title,expected", [
-    ("Football", "FB, GREEN BAG", "Mason Miller Signed USA Olympic Baseball Jersey (JSA)", "BS"),   # title word wins
-    ("", "jersey, Unsigned, Warriors", "Steph Curry Authentic Unsigned Basketball Jersey", "BK"),
-    ("", "Brewers, BS", "Jacob Misiorowski Signed Milwaukee Cream Jersey (JSA)", "BS"),             # no word: tag code
-    ("Football", "Eagles", "Some Signed Photo", "FB"),               # no word or code: existing converted
-    ("baseball", "", "x", "BS"),
-    ("FB", "", "x", "FB"),
-    ("", "FB", "Bo Jackson Signed Football and Baseball Photo", "FB"),  # two sports in the title: tag code
+    ("Football", "FB, GREEN BAG", "Mason Miller Signed USA Olympic Baseball Jersey (JSA)", "Baseball"),   # title word wins
+    ("", "jersey, Unsigned, Warriors", "Steph Curry Authentic Unsigned Basketball Jersey", "Basketball"),
+    ("", "Brewers, BS", "Jacob Misiorowski Signed Milwaukee Cream Jersey (JSA)", "Baseball"),   # no word: tag code
+    ("Football", "Eagles", "Some Signed Photo", "Football"),       # no word or code: existing kept
+    ("baseball", "", "x", "Baseball"),
+    ("FB", "", "x", "Football"),                                   # an existing code is written out
+    ("", "FB", "Bo Jackson Signed Football and Baseball Photo", "Football"),  # two sports in the title: tag code
+    ("", "WR, imported", "Some Signed Belt", "Wrestling"),
     ("", "Framed Photos", "Christina Applegate Signed Photo", ""),
     ("Golf", "", "x", "Golf"),                                     # not one of the six: left as it is
 ])

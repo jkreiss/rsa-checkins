@@ -27,7 +27,7 @@ AUTHENTICATOR_CASE = {"jsa": "JSA", "psa": "PSA", "beckett": "Beckett", "becket"
 # The only values allowed in the Authenticity column.
 AUTHENTICITY_VALUES = ("JSA", "Beckett", "Fanatics", "PSA", "Panini")
 
-# Tag code -> sport. The Sport column holds the code; the word is used to convert existing values.
+# Tag code -> sport. The Sport column holds the word ("BS" in the tags -> "Baseball").
 SPORT_CODES = {"FB": "Football", "BS": "Baseball", "BK": "Basketball", "HK": "Hockey",
                "WR": "Wrestling", "SC": "Soccer"}
 

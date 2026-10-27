@@ -47,12 +47,12 @@ def test_app_values_replace_existing_ones(conn, fake_client_factory):
     assert odell["Team (product.metafields.custom.team)"] == "Los Angeles Rams"
     kelly = _by_handle(rows, "jim-kelly")
     assert kelly[METAFIELD_PLAYER] == "Jim Kelly"
-    assert kelly["Sport (product.metafields.custom.sport)"] == "FB"        # no sport code in his tags: "Football" in the title
+    assert kelly["Sport (product.metafields.custom.sport)"] == "Football"  # no sport code in his tags: "Football" in the title
     assert kelly["Team (product.metafields.custom.team)"] == "Buffalo Bills"
     assert kelly["League (product.metafields.custom.league)"] == "NFL"
     jacob = _by_handle(rows, "jacob-misiorowski")
-    assert jacob["Sport (product.metafields.custom.sport)"] == "BS"   # BS tag
-    assert odell["Sport (product.metafields.custom.sport)"] == "FB"   # export said "Football": converted to the code
+    assert jacob["Sport (product.metafields.custom.sport)"] == "Baseball"   # BS tag
+    assert odell["Sport (product.metafields.custom.sport)"] == "Football"   # export said "Football": kept as the word
     assert jacob["Authenticity (product.metafields.custom.authenticity)"] == "JSA"
     braves = _by_handle(rows, "atlanta-braves")
     assert braves[METAFIELD_PLAYER] == "Gary Sheffield, Dale Murphy, Chipper Jones, David Justice"
@@ -85,15 +85,46 @@ def test_extra_column_in_header_order_and_missing_dropped(conn, fake_client_fact
     run_id = _done_run(conn, fake_client_factory)
     data = build_output_csv(conn, run_id, DEFAULT_OUTPUT_COLUMNS + ["Tags", "Not A Column"])
     header = next(csv.reader(io.StringIO(data.decode("utf-8"))))
-    assert header == [*DEFAULT_OUTPUT_COLUMNS[:5], "Tags", *DEFAULT_OUTPUT_COLUMNS[5:]]
+    assert header == [*DEFAULT_OUTPUT_COLUMNS[:3], "Tags", *DEFAULT_OUTPUT_COLUMNS[3:]]
     assert _by_handle(_rows(data), "jim-kelly")["Tags"].startswith("Bills, jersey")
 
 
-def test_output_columns_always_has_handle_title_and_options_first():
+def test_output_columns_always_has_handle_title_and_options_in_export_order():
     header = ["Handle", "Title", "Body (HTML)", "Option1 Name", "Option1 Value", "Tags", "SEO Title"]
     always = ["Handle", "Title", "Option1 Name", "Option1 Value"]
-    assert output_columns(["SEO Title", "Tags"], header) == [*always, "Tags", "SEO Title"]
-    assert output_columns([], header) == always
+    assert output_columns(["SEO Title", "Tags"], header) == [*always, "Tags", "SEO Title", WHOLESALE]
+    assert output_columns([], header) == [*always, WHOLESALE]
+
+
+WHOLESALE = "Wholesale Price (product.metafields.custom.wholesale_price)"
+
+
+def test_wholesale_price_column_is_empty_and_placed_like_the_template(conn, fake_client_factory):
+    run_id = _done_run(conn, fake_client_factory)
+    for cols in (DEFAULT_OUTPUT_COLUMNS, ["Handle", "Title", "Body (HTML)"]):   # also with an older saved setting
+        data = build_output_csv(conn, run_id, cols)
+        header = next(csv.reader(io.StringIO(data.decode("utf-8"))))
+        assert header[-1] == WHOLESALE
+        assert all(r[WHOLESALE] == "" for r in _rows(data))
+
+
+def test_output_columns_put_wholesale_after_the_custom_metafields():
+    header = ["Handle", "Title", "Team (product.metafields.custom.team)", "Text (product.metafields.custom.text)",
+              "Google: Custom Product (product.metafields.mm-google-shopping.custom_product)", "Status"]
+    assert output_columns(["Status", "Text (product.metafields.custom.text)"], header) == \
+        ["Handle", "Title", "Option1 Name", "Option1 Value", "Text (product.metafields.custom.text)", WHOLESALE, "Status"]
+
+
+def test_wholesale_price_copied_when_the_export_has_it(conn, fake_client_factory):
+    run_id = _done_run(conn, fake_client_factory)
+    header = json.loads(conn.execute("SELECT header FROM runs WHERE id=?", (run_id,)).fetchone()["header"])
+    conn.execute("UPDATE runs SET header=? WHERE id=?", (json.dumps([*header, WHOLESALE]), run_id))
+    p = conn.execute("SELECT id, first_row FROM products WHERE run_id=? AND handle LIKE 'odell%'", (run_id,)).fetchone()
+    row = {**json.loads(p["first_row"]), WHOLESALE: "45.00"}
+    conn.execute("UPDATE products SET first_row=? WHERE id=?", (json.dumps(row), p["id"]))
+    rows = _rows(build_output_csv(conn, run_id, DEFAULT_OUTPUT_COLUMNS))
+    assert _by_handle(rows, "odell")[WHOLESALE] == "45.00"          # never blanked once the store has values
+    assert _by_handle(rows, "jim-kelly")[WHOLESALE] == ""
 
 
 def test_option_columns_copied_from_export(conn, fake_client_factory):

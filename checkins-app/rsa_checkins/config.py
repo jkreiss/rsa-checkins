@@ -8,12 +8,14 @@ METAFIELD_PLAYER = "Player (product.metafields.custom.player)"
 METAFIELD_SPORT = "Sport (product.metafields.custom.sport)"
 METAFIELD_TEAM = "Team (product.metafields.custom.team)"
 METAFIELD_COLUMNS = (METAFIELD_AUTHENTICITY, METAFIELD_LEAGUE, METAFIELD_PLAYER, METAFIELD_SPORT, METAFIELD_TEAM)
+# Left empty for now (agents.md). Placed as in "Updates Template.csv": after the other custom metafields.
+METAFIELD_WHOLESALE = "Wholesale Price (product.metafields.custom.wholesale_price)"
 
 # Shopify rejects an import without these ("Product options input is required"). One-variant products use
 # Option1 Name "Title" and Option1 Value "Default Title".
 OPTION_COLUMNS = {"Option1 Name": "Title", "Option1 Value": "Default Title"}
 
-DEFAULT_OUTPUT_COLUMNS = ["Handle", "Title", *OPTION_COLUMNS, "Body (HTML)", "SEO Title", *METAFIELD_COLUMNS]
+DEFAULT_OUTPUT_COLUMNS = ["Handle", "Title", "Body (HTML)", *OPTION_COLUMNS, "SEO Title", *METAFIELD_COLUMNS, METAFIELD_WHOLESALE]
 
 DEFAULT_SETTINGS = {
     "model": "claude-sonnet-5-5",

@@ -5,16 +5,30 @@ import json
 import sqlite3
 
 from .config import (METAFIELD_AUTHENTICITY, METAFIELD_COLUMNS, METAFIELD_LEAGUE, METAFIELD_PLAYER,  # noqa: F401
-                     METAFIELD_SPORT, METAFIELD_TEAM, OPTION_COLUMNS)
-from .descriptions import authenticity_value, sport_from_tags, sport_value
+                     METAFIELD_SPORT, METAFIELD_TEAM, METAFIELD_WHOLESALE, OPTION_COLUMNS)
+from .descriptions import authenticity_value, sport_value
 
 REQUIRED = ("Handle", "Title", *OPTION_COLUMNS)   # always in the output, whatever the saved setting
+ALWAYS = (*REQUIRED, METAFIELD_WHOLESALE)
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
 
+def _template_header(header: list[str]) -> list[str]:
+    """The export's columns plus any always-included ones it lacks, placed as in "Updates Template.csv"."""
+    header = list(header)
+    for c in reversed(OPTION_COLUMNS):
+        if c not in header:
+            header.insert(header.index("Title") + 1 if "Title" in header else len(header), c)
+    if METAFIELD_WHOLESALE not in header:   # exports made before the metafield existed: after the custom ones
+        custom = [i for i, c in enumerate(header) if "(product.metafields.custom." in c]
+        header.insert(custom[-1] + 1 if custom else len(header), METAFIELD_WHOLESALE)
+    return header
+
+
 def output_columns(selected: list[str], header: list[str]) -> list[str]:
-    wanted = set(selected)
-    return [*REQUIRED, *(c for c in header if c in wanted and c not in REQUIRED)]
+    """The chosen columns plus the always-included ones, in the export's (and the template's) order."""
+    wanted = set(selected) | set(ALWAYS)
+    return [c for c in _template_header(header) if c in wanted]
 
 
 def _strip_formula(value: str) -> str:
@@ -38,7 +52,7 @@ def derived_values(product: sqlite3.Row, subject_names: list[str]) -> dict[str, 
         METAFIELD_AUTHENTICITY: authenticity_value(product["title"]),
         METAFIELD_LEAGUE: _strip_formula(product["league"]),
         METAFIELD_PLAYER: "" if product["kind"] == "no_player" else ", ".join(names),
-        METAFIELD_SPORT: sport_from_tags(product["tags"]),
+        METAFIELD_SPORT: sport_value("", product["tags"], product["title"]),
         METAFIELD_TEAM: _strip_formula(product["team"]),
         "SEO Title": _strip_formula(product["seo_title"] or ""),
         "Body (HTML)": product["description_html"] or "",
@@ -70,7 +84,7 @@ def build_output_csv(conn: sqlite3.Connection, run_id: int, columns: list[str]) 
                 row.append(OPTION_COLUMNS[c] if no_options else existing)
             elif c == "SEO Title":
                 row.append(derived[c] or existing)
-            elif c == METAFIELD_SPORT:   # always the code: existing words are converted, blanks filled
+            elif c == METAFIELD_SPORT:   # always the word: codes are written out, blanks filled
                 row.append(sport_value(existing, p["tags"], p["title"]))
             elif c in METAFIELD_COLUMNS:   # the app's value wins; the export's only when the app has none
                 value = derived[c] if derived[c].strip() else existing
