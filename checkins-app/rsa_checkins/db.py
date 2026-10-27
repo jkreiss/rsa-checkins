@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS runs (
   include_drafts INTEGER NOT NULL,
   skipped_new_style INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('parsing','ready','running','paused','done','error')),
-  error TEXT
+  error TEXT,
+  notes TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS products (
   kind TEXT CHECK (kind IN ('signed','unsigned_player','no_player')),
   team TEXT NOT NULL DEFAULT '', league TEXT NOT NULL DEFAULT '',
   seo_title TEXT,
+  auth TEXT,
   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','done','failed')),
   reused INTEGER NOT NULL DEFAULT 0,
   description_html TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 0,
@@ -86,6 +88,8 @@ def connect(path: Path | str) -> sqlite3.Connection:
 # Columns added after the first release: (table, column, definition). Added to older files on start.
 MIGRATIONS = [
     ("subjects", "facts_edited_at", "TEXT"),
+    ("runs", "notes", "TEXT NOT NULL DEFAULT '{}'"),    # check-in runs: rows left out, warnings, rows per tab
+    ("products", "auth", "TEXT"),                       # check-in products: the cert, from the sheet
 ]
 
 

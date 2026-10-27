@@ -57,11 +57,12 @@ def sport_value(existing: str, tags: str, title: str = "") -> str:
     return SPORT_CODES[code] if code else e
 
 
-def auth_sentence(title: str, kind: str, rotation: int) -> str:
+def auth_sentence(title: str, kind: str, rotation: int, auth: str | None = None) -> str:
+    """auth: the authenticator when already known (check-in sheet); otherwise it's read from the title."""
     if kind != "signed":
         return UNSIGNED_SENTENCES[rotation % 3]
     guarantee = SIGNED_GUARANTEES[rotation % 3]
-    a = authenticator(title)
+    a = authenticator(title) if auth is None else auth
     if a:
         return f"It was authenticated by {a}, carries a unique tamper-evident authentication sticker, {guarantee}."
     return f"It carries a unique tamper-evident authentication sticker, {guarantee}."

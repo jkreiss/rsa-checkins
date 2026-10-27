@@ -60,8 +60,10 @@ def _write(conn, client, model: str, work: jobs.WriteWork, worker_id: str) -> No
                                 (p["id"],)):
             if row["subject_id"] not in subject_ids:
                 subject_ids.append(row["subject_id"])
+    # A product with `auth` set came from a check-in sheet: the cert and SEO title are already known.
     items = [WriteItem(handle=p["handle"], title=p["title"], product_type=p["product_type"], tags=p["tags"],
-                       kind=p["kind"], authenticator=authenticator(p["title"]), team=p["team"]) for p in products]
+                       kind=p["kind"], authenticator=p["auth"] if p["auth"] is not None else authenticator(p["title"]),
+                       team=p["team"]) for p in products]
     log.info("writing %d product(s): %s", len(items), items[0].title)
     try:
         written = write_descriptions(client, model, items, [players.subject_facts(conn, s) for s in subject_ids],
@@ -77,12 +79,15 @@ def _write(conn, client, model: str, work: jobs.WriteWork, worker_id: str) -> No
         if parts is None:
             missing.append(p["id"])
             continue
-        auth = auth_sentence(p["title"], p["kind"], rotation=p["id"])
+        auth = auth_sentence(p["title"], p["kind"], rotation=p["id"], auth=p["auth"])
         names = [r["name"] for r in conn.execute(
             "SELECT s.name FROM product_subjects ps JOIN subjects s ON s.id = ps.subject_id "
             "WHERE ps.product_id = ? ORDER BY ps.position", (p["id"],))]
         # SEO title by rule; Claude's only when the rule can't build one (unknown item, too long)
-        seo = seo_title(p["title"], p["kind"], p["product_type"], names, p["team"]) or parts.seo_title
+        if p["auth"] is not None:
+            seo = p["seo_title"]
+        else:
+            seo = seo_title(p["title"], p["kind"], p["product_type"], names, p["team"]) or parts.seo_title
         if jobs.complete_product(conn, p["id"], build_html(parts.sentence1, auth, parts.call_to_action, parts.note),
                                  seo, worker_id):
             written_titles.append(p["title"])

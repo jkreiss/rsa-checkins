@@ -1,11 +1,14 @@
 """Runs and products: the crash-safe work queue the worker takes from."""
 import json
+import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import players
+from . import checkin_build, players
+from .checkin_sheet import read_workbook
+from .config import TEMPLATE_COLUMNS
 from .claude_api import WORK_ERRORS, Research
 from .db import iso, now_iso, transaction
 from .shopify_export import NEW_STYLE_MARKER, needs_description, read_export
@@ -42,6 +45,62 @@ def create_run(conn: sqlite3.Connection, upload_path: Path, filename: str, inclu
             ).lastrowid
             _reuse_previous(conn, pid, run_id, p)
     return run_id
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def create_checkin_run(conn: sqlite3.Connection, upload_path: Path, filename: str) -> int:
+    """A run for a check-in workbook. Rows are built here, so it starts 'ready' (no title parsing).
+
+    Raises CheckinFormatError when the file isn't a check-in workbook."""
+    sheet = read_workbook(upload_path)
+    built, problems, warnings = [], [], []
+    for raw in sheet.rows:
+        b = checkin_build.build(raw)
+        if isinstance(b, checkin_build.Problem):
+            problems.append(asdict(b))
+            continue
+        built.append(b)
+        warnings += [{"tab": b.tab, "row": b.row, "name": b.player, "warning": w} for w in b.warnings]
+    tabs: dict[str, int] = {}
+    for b in built:
+        tabs[b.tab] = tabs.get(b.tab, 0) + 1
+    notes = {"tabs": tabs, "problems": problems, "warnings": warnings, "ignored_tabs": sheet.ignored_tabs}
+    now = now_iso()
+    with transaction(conn):
+        run_id = conn.execute(
+            "INSERT INTO runs (created_at, filename, upload_path, input_kind, header, include_drafts, status, notes) "
+            "VALUES (?, ?, ?, 'checkin_sheet', ?, 1, 'ready', ?)",
+            (now, filename, str(upload_path), json.dumps(TEMPLATE_COLUMNS), json.dumps(notes)),
+        ).lastrowid
+        used: dict[str, int] = {}
+        for b in built:
+            base = _slug(b.title)
+            used[base] = used.get(base, 0) + 1
+            handle = base if used[base] == 1 else f"{base}-{used[base]}"
+            pid = conn.execute(
+                "INSERT INTO products (run_id, handle, title, product_type, tags, shop_status, first_row, kind, "
+                "team, league, seo_title, auth, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, 'signed', ?, ?, ?, ?, ?)",
+                (run_id, handle, b.title, b.product_type, b.tags, json.dumps(b.columns), b.team_for_ai, b.league,
+                 b.seo_title, b.auth, now),
+            ).lastrowid
+            _link_subject(conn, pid, b.player, "person", 0)
+    return run_id
+
+
+def run_notes(conn: sqlite3.Connection, run_id: int) -> dict:
+    return json.loads(conn.execute("SELECT notes FROM runs WHERE id = ?", (run_id,)).fetchone()["notes"])
+
+
+def _link_subject(conn, product_id: int, name: str, kind: str, position: int) -> None:
+    sid = players.get_or_create_subject(conn, name, kind)
+    conn.execute("INSERT OR IGNORE INTO product_subjects (product_id, subject_id, position) VALUES (?, ?, ?)",
+                 (product_id, sid, position))
+    # A subject that ran out of attempts in an earlier run gets a full set again.
+    conn.execute("UPDATE subjects SET research_attempts = 0 WHERE id = ? AND research_attempts >= ?",
+                 (sid, MAX_ATTEMPTS))
 
 
 def _reuse_previous(conn, product_id: int, run_id: int, product) -> None:
@@ -89,12 +148,7 @@ def prepare_run(conn: sqlite3.Connection, client, model: str, run_id: int) -> No
             conn.execute("DELETE FROM product_subjects WHERE product_id = ?", (r["id"],))
             subject_kind = "product_line" if parse.kind == "no_player" else "person"
             for pos, name in enumerate(parse.subjects):
-                sid = players.get_or_create_subject(conn, name, subject_kind)
-                conn.execute("INSERT OR IGNORE INTO product_subjects (product_id, subject_id, position) VALUES (?, ?, ?)",
-                             (r["id"], sid, pos))
-                # A subject that ran out of attempts in an earlier run gets a full set again.
-                conn.execute("UPDATE subjects SET research_attempts = 0 WHERE id = ? AND research_attempts >= ?",
-                             (sid, MAX_ATTEMPTS))
+                _link_subject(conn, r["id"], name, subject_kind, pos)
         conn.execute("UPDATE runs SET status = 'ready', error = NULL WHERE id = ?", (run_id,))
 
 
@@ -347,5 +401,7 @@ def failed_products(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM products WHERE run_id = ? AND state = 'failed' ORDER BY id", (run_id,)).fetchall()
 
 
-def list_runs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    return conn.execute("SELECT * FROM runs ORDER BY id DESC").fetchall()
+def list_runs(conn: sqlite3.Connection, input_kind: str | None = None) -> list[sqlite3.Row]:
+    if input_kind is None:
+        return conn.execute("SELECT * FROM runs ORDER BY id DESC").fetchall()
+    return conn.execute("SELECT * FROM runs WHERE input_kind = ? ORDER BY id DESC", (input_kind,)).fetchall()
