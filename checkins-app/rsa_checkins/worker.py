@@ -9,7 +9,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 
-from . import config, db, jobs, players
+from . import config, db, jobs, players, rules
 from .claude_api import WORK_ERRORS, WriteItem, make_client, research_subject, write_descriptions
 from .descriptions import auth_sentence, authenticator, build_html, seo_title
 
@@ -51,6 +51,11 @@ def _research(conn, client, model: str, work: jobs.ResearchWork, worker_id: str)
         jobs.log_event(conn, f"Looked up {r.display_name} ({n} fact{'' if n == 1 else 's'})")
 
 
+def _opening(p) -> str:
+    """Signed items take the first-sentence patterns in turn, so descriptions don't all open the same way."""
+    return rules.SIGNED_OPENINGS[p["id"] % len(rules.SIGNED_OPENINGS)] if p["kind"] == "signed" else ""
+
+
 def _write(conn, client, model: str, work: jobs.WriteWork, worker_id: str) -> None:
     marks = ",".join("?" * len(work.product_ids))
     products = conn.execute(f"SELECT * FROM products WHERE id IN ({marks}) ORDER BY id", work.product_ids).fetchall()
@@ -63,7 +68,7 @@ def _write(conn, client, model: str, work: jobs.WriteWork, worker_id: str) -> No
     # A product with `auth` set came from a check-in sheet: the cert and SEO title are already known.
     items = [WriteItem(handle=p["handle"], title=p["title"], product_type=p["product_type"], tags=p["tags"],
                        kind=p["kind"], authenticator=p["auth"] if p["auth"] is not None else authenticator(p["title"]),
-                       team=p["team"]) for p in products]
+                       team=p["team"], opening=_opening(p)) for p in products]
     log.info("writing %d product(s): %s", len(items), items[0].title)
     try:
         written = write_descriptions(client, model, items, [players.subject_facts(conn, s) for s in subject_ids],

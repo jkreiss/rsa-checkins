@@ -20,6 +20,15 @@ UNSIGNED_SENTENCES = [
     "As with everything in our store, it comes with our 100% money-back guarantee.",
 ]
 
+# First sentence for signed items: one pattern per product, taken in turn (like the guarantee wording).
+# Claude fills in the brackets. Keep [collectible term] (a broad keyword) and name the item type only once.
+SIGNED_OPENINGS = [
+    "This [person] autographed [collectible term] is a [item description], hand-signed by [short descriptor].",
+    "Hand-signed by [short descriptor] [person], this autographed [collectible term] is a [item description].",
+    "This [item description] is a [person] autographed [collectible term], personally signed by [short descriptor].",
+    "Personally signed by [person], [short descriptor], this [item description] is an autographed [collectible term].",
+]
+
 # How authenticator names from titles are written.
 AUTHENTICATOR_CASE = {"jsa": "JSA", "psa": "PSA", "beckett": "Beckett", "becket": "Beckett",
                       "fanatics": "Fanatics", "panini": "Panini"}
@@ -62,17 +71,18 @@ When you are done, call the save_research tool exactly once with everything you 
 WRITE_PROMPT = """You write product descriptions for an autographed sports and entertainment memorabilia store.
 
 You get JSON with:
-- products: the items to write (handle, title, product type, tags, kind, authenticator, team).
+- products: the items to write (handle, title, product type, tags, kind, authenticator, team, opening).
 - subjects: verified facts about the people (or product line) on these items. Use ONLY these facts for anything about careers, awards, records or history. If a fact you'd like isn't there, leave it out.
 - previous_notes: notes already written for other items of the same people. Yours must be clearly different.
 
 For EACH product return: handle (exactly as given), sentence1, call_to_action, note, seo_title.
 
 sentence1 - one sentence:
-- Signed items: "This [person] autographed [collectible term] is a [item description from the title], hand-signed by [short descriptor]." If the title has an inscription, quote it, e.g. inscribed "Who's Your Daddy?".
+- Signed items: follow the product's "opening" pattern, filling in every [bracket]. Keep the pattern's wording and order; only fix "a"/"an" and commas so it reads naturally. [item description] comes from the title. If the title has an inscription, quote it, e.g. inscribed "Who's Your Daddy?".
   - [collectible term] is a broad, high-search phrase, NOT the item type: "collectible", "memorabilia piece", or for athletes "sports collectible" / "sports memorabilia piece". Vary it between products.
-  - The item type (jersey, football, helmet, photo...) appears only once, in the "is a ..." part.
+  - The item type (jersey, football, helmet, photo...) appears only once, in [item description].
   - Good: "This Kelvin Benjamin autographed collectible is a Florida State college red football jersey, hand-signed by the former Seminoles wide receiver."
+  - Good: "Hand-signed by former Seminoles wide receiver Kelvin Benjamin, this autographed sports collectible is a Florida State college red football jersey."
   - Bad (item type twice): "This Kelvin Benjamin autographed football jersey is a Florida State college red football jersey, ..."
 - Several signers: name all of them.
 - Unsigned items (kind "unsigned_player" or "no_player"): describe the item plainly, naming the item type only once. Never say "autographed", "signed" or "hand-signed".

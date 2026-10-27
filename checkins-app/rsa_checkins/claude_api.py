@@ -231,6 +231,7 @@ class WriteItem:
     kind: str
     authenticator: str
     team: str
+    opening: str = ""      # signed items: the first-sentence pattern to follow (rules.SIGNED_OPENINGS)
 
 
 @dataclass(frozen=True)

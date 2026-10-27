@@ -210,3 +210,28 @@ def test_seo_title_from_code_with_claude_as_fallback(conn, fake_client_factory):
     assert tee == "Tee Higgins Autographed Cincinnati Jersey - Beckett Authentication"
     assert braves[1] == f"SEO {braves[0]}"     # four signers don't fit in 70 characters: Claude's
     assert seat[1] == f"SEO {seat[0]}"         # "Collectibles" has no item word: Claude's
+
+
+def test_signed_products_get_rotating_openings(conn, fake_client_factory):
+    client = fake_client_factory(responder=responder())
+    _started_run(conn, client)
+    while process_one(conn, client, "w1", NOW):
+        pass
+    kinds = {r["handle"]: (r["id"], r["kind"]) for r in conn.execute("SELECT id, handle, kind FROM products")}
+    sent = [p for c in client.calls if c["system"] == rules.WRITE_PROMPT
+            for p in json.loads(c["messages"][0]["content"])["products"]]
+    assert sent
+    for p in sent:
+        pid, kind = kinds[p["handle"]]
+        if kind == "signed":
+            assert p["opening"] == rules.SIGNED_OPENINGS[pid % len(rules.SIGNED_OPENINGS)]
+        else:
+            assert p["opening"] == ""
+    assert len({p["opening"] for p in sent if p["opening"]}) > 1
+
+
+def test_openings_keep_the_owner_rules():
+    assert len(rules.SIGNED_OPENINGS) == 4
+    for o in rules.SIGNED_OPENINGS:
+        assert "[person]" in o and "[item description]" in o and "[collectible term]" in o
+    assert "opening" in rules.WRITE_PROMPT
