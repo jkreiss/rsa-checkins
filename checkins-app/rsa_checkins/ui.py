@@ -1,10 +1,11 @@
 """Small helpers shared by the Streamlit pages."""
 import os
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator
 
 import streamlit as st
 
@@ -97,13 +98,19 @@ class RunPage:
     started_details: Callable[[sqlite3.Connection, int], None] | None = None     # under the progress
 
 
-def save_upload(uploaded, fallback_name: str) -> tuple[Path, str]:
+@contextmanager
+def saved_upload(uploaded, fallback_name: str) -> Iterator[tuple[Path, str]]:
+    """The uploaded file on disk while the run is created from it, then deleted.
+    Everything a run needs is copied into the database, so uploads aren't kept."""
     name = os.path.basename(uploaded.name) or fallback_name
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     config.upload_dir().mkdir(parents=True, exist_ok=True)
     path = config.upload_dir() / f"{stamp}-{name}"
     path.write_bytes(uploaded.getvalue())
-    return path, name
+    try:
+        yield path, name
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def run_picker(conn: sqlite3.Connection, page: RunPage) -> int:

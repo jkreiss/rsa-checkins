@@ -75,6 +75,11 @@ def test_done_run_shows_two_downloads(data_conn):
     assert buttons[0].proto.type == "primary"
 
 
+def _uploads_kept() -> list:
+    d = config.upload_dir()
+    return sorted(p.name for p in d.rglob("*") if p.is_file()) if d.exists() else []
+
+
 def test_upload_creates_one_run(data_conn):
     at = _app("pages/run.py")
     at.file_uploader[0].set_value(("export.csv", FIX.read_bytes(), "text/csv"))
@@ -83,8 +88,7 @@ def test_upload_creates_one_run(data_conn):
     at.run()
     runs = data_conn.execute("SELECT * FROM runs").fetchall()
     assert len(runs) == 1 and runs[0]["filename"] == "export.csv" and runs[0]["status"] == "parsing"
-    saved = Path(runs[0]["upload_path"])
-    assert saved.parent == config.upload_dir() and saved.name.endswith("-export.csv") and saved.exists()
+    assert _uploads_kept() == []      # read into the database, then deleted
 
 
 def test_upload_wrong_file_shows_error(data_conn):
@@ -93,7 +97,7 @@ def test_upload_wrong_file_shows_error(data_conn):
     at.button(key="create-run").click().run()
     assert any("Missing columns" in e.value for e in at.error)
     assert data_conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
-    assert all(p.parent == config.upload_dir() for p in config.upload_dir().iterdir())
+    assert _uploads_kept() == []
 
 
 def test_failed_products_listed_with_retry(data_conn):
@@ -275,3 +279,22 @@ def test_both_run_pages_preview_the_same_way(data_conn, tmp_path):
         shown.append(([m.label for m in at.metric], [s.value for s in at.subheader][:1], "Start" in _labels(at, "button")))
     assert shown[0] == shown[1]
     assert shown[0][0] == ["Products to write", "Players already known", "Players to look up"]
+
+
+def test_checkins_upload_creates_run_and_keeps_no_file(data_conn, tmp_path):
+    at = _app("pages/checkins.py")
+    data = make_workbook(tmp_path / "c.xlsx").read_bytes()
+    at.file_uploader[0].set_value(("checkin.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+    at.button(key="create-checkin-run").click().run()
+    assert not at.exception
+    runs = data_conn.execute("SELECT * FROM runs").fetchall()
+    assert len(runs) == 1 and runs[0]["input_kind"] == "checkin_sheet" and runs[0]["filename"] == "checkin.xlsx"
+    assert _uploads_kept() == []
+
+
+def test_checkins_wrong_file_shows_error_and_keeps_no_file(data_conn):
+    at = _app("pages/checkins.py")
+    at.file_uploader[0].set_value(("notes.xlsx", b"not a workbook", "application/octet-stream"))
+    at.button(key="create-checkin-run").click().run()
+    assert at.error and data_conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 0
+    assert _uploads_kept() == []

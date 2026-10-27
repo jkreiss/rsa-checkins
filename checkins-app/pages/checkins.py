@@ -3,7 +3,7 @@ import streamlit as st
 
 from rsa_checkins import jobs, output
 from rsa_checkins.checkin_sheet import CheckinFormatError
-from rsa_checkins.ui import RunPage, get_conn, run_picker, run_status, save_upload
+from rsa_checkins.ui import RunPage, get_conn, run_picker, run_status, saved_upload
 
 conn = get_conn()
 st.title("Checkins")
@@ -53,12 +53,11 @@ with st.form("upload-checkin", clear_on_submit=True):
     submitted = st.form_submit_button("Create products", key="create-checkin-run")
 
 if submitted and uploaded is not None:
-    path, name = save_upload(uploaded, "checkin.xlsx")
-    try:
-        st.session_state[PAGE.state_key] = jobs.create_checkin_run(conn, path, name)
-    except CheckinFormatError as e:
-        path.unlink(missing_ok=True)
-        st.error(str(e))
+    with saved_upload(uploaded, "checkin.xlsx") as (path, name):
+        try:
+            st.session_state[PAGE.state_key] = jobs.create_checkin_run(conn, path, name)
+        except CheckinFormatError as e:
+            st.error(str(e))
 elif submitted:
     st.error("Choose an .xlsx file first.")
 

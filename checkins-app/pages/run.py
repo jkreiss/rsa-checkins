@@ -3,7 +3,7 @@ import streamlit as st
 
 from rsa_checkins import db, jobs, output
 from rsa_checkins.shopify_export import ExportFormatError
-from rsa_checkins.ui import RunPage, get_conn, run_picker, run_status, save_upload
+from rsa_checkins.ui import RunPage, get_conn, run_picker, run_status, saved_upload
 
 conn = get_conn()
 st.title("Shopify Product Export")
@@ -31,12 +31,11 @@ with st.form("upload", clear_on_submit=True):
     submitted = st.form_submit_button("Update products", key="create-run")
 
 if submitted and uploaded is not None:
-    path, name = save_upload(uploaded, "export.csv")
-    try:
-        st.session_state[PAGE.state_key] = jobs.create_run(conn, path, name, include_drafts)
-    except ExportFormatError as e:
-        path.unlink(missing_ok=True)
-        st.error(str(e))
+    with saved_upload(uploaded, "export.csv") as (path, name):
+        try:
+            st.session_state[PAGE.state_key] = jobs.create_run(conn, path, name, include_drafts)
+        except ExportFormatError as e:
+            st.error(str(e))
 elif submitted:
     st.error("Choose a CSV file first.")
 
