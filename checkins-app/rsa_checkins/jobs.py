@@ -173,13 +173,17 @@ def preview(conn: sqlite3.Connection, run_id: int, refresh_days: int, now: datet
     run = conn.execute("SELECT skipped_new_style FROM runs WHERE id = ?", (run_id,)).fetchone()
     counts = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(reused), 0) AS reused FROM products WHERE run_id = ?",
                           (run_id,)).fetchone()
+    # Every player in the run counts, including those on products that reuse an earlier description.
+    # Only players on products still to write can need a look-up.
     subjects = conn.execute(
-        "SELECT DISTINCT s.* FROM subjects s JOIN product_subjects ps ON ps.subject_id = s.id "
-        "JOIN products p ON p.id = ps.product_id WHERE p.run_id = ? AND p.state = 'pending'",
+        "SELECT s.*, MAX(p.state = 'pending') AS needed FROM subjects s "
+        "JOIN product_subjects ps ON ps.subject_id = s.id JOIN products p ON p.id = ps.product_id "
+        "WHERE p.run_id = ? GROUP BY s.id",
         (run_id,),
     ).fetchall()
-    fresh = sum(1 for s in subjects if players.is_fresh(s, refresh_days, now, retired_days))
-    return Preview(counts["n"], counts["reused"], run["skipped_new_style"], len(subjects), fresh, len(subjects) - fresh)
+    to_research = sum(1 for s in subjects if s["needed"] and not players.is_fresh(s, refresh_days, now, retired_days))
+    return Preview(counts["n"], counts["reused"], run["skipped_new_style"], len(subjects),
+                   len(subjects) - to_research, to_research)
 
 
 def set_run_status(conn: sqlite3.Connection, run_id: int, status: str) -> None:

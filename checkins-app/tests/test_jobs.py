@@ -356,3 +356,28 @@ def test_stale_retired_player_is_researched_again(conn, fake_client_factory):
     w = claim_next(conn, "w1", 30, NOW, retired_days=180)
     assert isinstance(w, ResearchWork) and w.subject_id == sid
     assert preview(conn, run_id, 30, NOW, retired_days=180).subjects_to_research == 1
+
+
+def test_preview_counts_known_players_on_reused_products(conn, fake_client_factory):
+    run1 = prepared_run(conn, fake_client_factory)
+    _research_all(conn)
+    for r in conn.execute("SELECT id FROM products WHERE run_id=?", (run1,)).fetchall():
+        complete_product(conn, r["id"], "<p>a</p><p>b</p>", "seo")
+    run2 = prepared_run(conn, fake_client_factory)        # same export again: every description is reused
+    linked = conn.execute("SELECT COUNT(DISTINCT ps.subject_id) FROM product_subjects ps JOIN products p "
+                          "ON p.id = ps.product_id WHERE p.run_id=?", (run2,)).fetchone()[0]
+    p = preview(conn, run2, 90, NOW)
+    assert p.reused == p.products and linked > 0
+    assert (p.subjects, p.subjects_fresh, p.subjects_to_research) == (linked, linked, 0)
+
+
+def test_preview_known_player_on_reused_product_is_not_looked_up(conn, fake_client_factory):
+    run1 = prepared_run(conn, fake_client_factory)
+    _research_all(conn)
+    pid = conn.execute("SELECT id FROM products WHERE run_id=? AND handle LIKE 'tee-higgins%'", (run1,)).fetchone()["id"]
+    complete_product(conn, pid, "<p>a</p><p>b</p>", "seo")
+    conn.execute("UPDATE subjects SET researched_at = '2000-01-01T00:00:00+00:00' WHERE name = 'Tee Higgins'")
+    run2 = prepared_run(conn, fake_client_factory)        # Tee Higgins' product is reused, so no look-up needed
+    p = preview(conn, run2, 90, NOW)
+    assert p.subjects_to_research == 0
+    assert p.subjects_fresh == p.subjects
