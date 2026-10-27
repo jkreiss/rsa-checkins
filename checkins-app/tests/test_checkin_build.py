@@ -88,13 +88,33 @@ def test_alt_text():
 
 
 def test_tags():
-    assert tags_for("jerseys", KEENAN_AUTH) == "Jerseys, Current, Colts, Authentic, NFL, Green Bag, FB, Imported"
+    assert tags_for("jerseys", KEENAN_AUTH) == "Jerseys, Current, Colts, Authentic, NFL, GREEN BAG, FB, Imported"
     assert tags_for("jerseys", {**KEENAN_CUSTOM, "model": ""}) == "Jerseys, Current, Colts, Custom, NFL, FB, Imported"
     assert tags_for("fs-helm", GRIESE) == "Dolphins, Authentic, NFL, FB, HOF, Imported"
     assert tags_for("minis", BRADSHAW) == "Steelers, NFL, FB"
-    assert tags_for("fb-balls", CROSBY) == "NFL, Raiders, Imported, Gold Bag, FB"
+    assert tags_for("fb-balls", CROSBY) == "NFL, Raiders, Imported, GOLD BAG, FB"
     baseball = tags_for("fs-helm", {**GRIESE, "sport": "Baseball"}).split(", ")
     assert "BS" in baseball and "FB" not in baseball
+
+
+def test_bag_from_the_tag_column_when_green_gold_is_blank():
+    bo = _v(jersey_type="Custom", first="Bo", last="Jackson", city="Los Angeles", mascot="Raiders", cert="Beckett",
+            tags="GOLD BAG, Raiders")
+    assert tags_for("jerseys", bo) == "Jerseys, Raiders, Custom, NFL, GOLD BAG, FB, Imported"
+    bradshaw = {**BRADSHAW, "tags": "Steelers, gold bag"}
+    assert tags_for("minis", bradshaw) == "Steelers, NFL, GOLD BAG, FB"
+
+
+def test_green_gold_column_wins_over_the_tag_column():
+    keenan = {**KEENAN_AUTH, "tags": "Colts, GOLD BAG"}           # Green/Gold says Green Bag
+    tags = tags_for("jerseys", keenan).split(", ")
+    assert "GREEN BAG" in tags and "GOLD BAG" not in tags
+
+
+def test_other_sheet_tags_are_added_once():
+    keenan = {**KEENAN_AUTH, "tags": "Colts, GREEN BAG, Rookie, nfl,  , Pro Bowl"}
+    assert tags_for("jerseys", keenan) == \
+        "Jerseys, Current, Colts, Authentic, NFL, GREEN BAG, FB, Imported, Rookie, Pro Bowl"
 
 
 @pytest.mark.parametrize("sport,code", [("Football", "FB"), ("baseball", "BS"), ("Hockey", "HK"),
@@ -155,7 +175,7 @@ def test_build_keenan_authentic(sheet):
     assert c["Variant Inventory Qty"] == "15"
     assert c["Variant Grams"] == "896"
     assert c["Variant Weight Unit"] == "oz"
-    assert c["Tags"] == "Jerseys, Current, Colts, Authentic, NFL, Green Bag, FB, Imported"
+    assert c["Tags"] == "Jerseys, Current, Colts, Authentic, NFL, GREEN BAG, FB, Imported"
     assert c["SEO Title"] == "Keenan Allen Autographed Indianapolis Jersey - JSA Authentication"
     assert c["Image Alt Text"] == "Keenan Allen Autographed Jersey"
     assert (c[METAFIELD_AUTHENTICITY], c[METAFIELD_LEAGUE], c[METAFIELD_PLAYER], c[METAFIELD_SPORT],

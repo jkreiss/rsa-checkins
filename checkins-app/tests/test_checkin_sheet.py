@@ -41,6 +41,7 @@ def test_meanings_per_tab(rows):
     assert (bradshaw["league"], bradshaw["style"]) == ("NFL", "Throwback Gold")
     keenan = _find(rows, "Allen", jersey_type="Authentic").values
     assert keenan["bag"] == "Green Bag"
+    assert _find(rows, "Allen", jersey_type="Custom").values["tags"] == "Colts, GREEN BAG"   # "Tag" column
     assert keenan["ws"] == "200"
     assert _find(rows, "Kelce").values["ws"] == "180"          # header "Ws "
     assert _find(rows, "Blount").values["ws"] == "54"          # header "WS price"

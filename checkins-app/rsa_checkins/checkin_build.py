@@ -92,17 +92,42 @@ def alt_text_for(tab: str, v: dict) -> str:
     return _join(_name(v), "Autographed", mascot, item)
 
 
+# Bag tags as the store writes them (525 products in the 10.20 export use these exact tags).
+_BAG_TAGS = {"green bag": "GREEN BAG", "gold bag": "GOLD BAG"}
+
+
+def _sheet_tags(v: dict) -> list[str]:
+    """The sheet's own "Tag" column, e.g. "Colts, GREEN BAG"."""
+    return [t.strip() for t in v["tags"].split(",") if t.strip()]
+
+
+def _bag(v: dict) -> str:
+    """The Green/Gold column; when it's blank, a bag named in the Tag column."""
+    if v["bag"]:
+        text = v["bag"].strip().lower()
+        return next((tag for word, tag in (("green", "GREEN BAG"), ("gold", "GOLD BAG")) if word in text),
+                    v["bag"].strip())
+    return next((_BAG_TAGS[t.lower()] for t in _sheet_tags(v) if t.lower() in _BAG_TAGS), "")
+
+
 def tags_for(tab: str, v: dict) -> str:
-    code = sport_code(v["sport"])
+    code, bag = sport_code(v["sport"]), _bag(v)
     if tab == "jerseys":
-        tags = ["Jerseys", v["player_type"], v["mascot"], v["jersey_type"], v["league"], v["bag"], code, "Imported"]
+        tags = ["Jerseys", v["player_type"], v["mascot"], v["jersey_type"], v["league"], bag, code, "Imported"]
     elif tab == "fs-helm":
-        tags = [v["mascot"], v["rep_auth"], v["league"], code, v["player_type"], v["bag"], "Imported"]
+        tags = [v["mascot"], v["rep_auth"], v["league"], code, v["player_type"], bag, "Imported"]
     elif tab == "minis":
-        tags = [v["mascot"], v["league"], v["player_type"], v["bag"], code]
+        tags = [v["mascot"], v["league"], v["player_type"], bag, code]
     else:  # fb-balls
-        tags = [v["league"], v["mascot"], "Imported", v["player_type"], v["bag"], code]
-    return ", ".join(t for t in tags if t)
+        tags = [v["league"], v["mascot"], "Imported", v["player_type"], bag, code]
+    tags = [t for t in tags if t]
+    # Then anything else from the sheet's Tag column, once. Its bag was handled above (Green/Gold wins).
+    seen = {t.lower() for t in tags}
+    for t in _sheet_tags(v):
+        if t.lower() not in seen and t.lower() not in _BAG_TAGS:
+            tags.append(t)
+            seen.add(t.lower())
+    return ", ".join(tags)
 
 
 # ---- One row -> every Shopify column ----

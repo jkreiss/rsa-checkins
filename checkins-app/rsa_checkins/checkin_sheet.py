@@ -14,13 +14,13 @@ TABS = ("jerseys", "fs-helm", "minis", "fb-balls")
 
 MEANINGS = ("date", "sport", "league", "product", "jersey_type", "rep_auth", "model", "style", "inv",
             "first", "last", "city", "mascot", "color", "inscription", "player_type", "cert", "bag",
-            "sku", "upc", "weight", "cost", "price", "compare", "ws")
+            "sku", "upc", "weight", "cost", "price", "compare", "ws", "tags")
 
 _COMMON = {"date": "date", "sport": "sport", "league": "league", "product": "product", "model": "model",
            "inv": "inv", "first-name": "first", "last-name": "last", "team": "city", "mascot": "mascot",
            "color": "color", "inscription": "inscription", "player-type": "player_type", "cert": "cert",
            "green/gold": "bag", "sku": "sku", "upc": "upc", "weight": "weight", "cost": "cost",
-           "price": "price", "compare": "compare", "ws": "ws", "ws price": "ws"}
+           "price": "price", "compare": "compare", "ws": "ws", "ws price": "ws", "tag": "tags"}
 HEADER_MEANINGS = {
     "jerseys": {**_COMMON, "type": "jersey_type"},
     "fs-helm": {**_COMMON, "rep/auth": "rep_auth", "type": "style"},
